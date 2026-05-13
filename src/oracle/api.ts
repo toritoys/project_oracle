@@ -1,4 +1,5 @@
 import { mapLocally } from './localMapper';
+import { analyzeLinguistics } from './linguisticAnalyzer';
 import type { OracleResponse } from './types';
 
 const GROQ_KEY_STORAGE = 'oracle_groq_key';
@@ -69,6 +70,12 @@ async function queryGroq(question: string, key: string): Promise<OracleResponse>
   parsed.valence = Math.max(-1, Math.min(1, (parsed.valence ?? 0) + (Math.random() - 0.5) * 0.28));
   parsed.arousal = Math.max(0, Math.min(1, (parsed.arousal ?? 0.5) + (Math.random() - 0.5) * 0.22));
   parsed.certainty = Math.max(0, Math.min(1, (parsed.certainty ?? 0.5) + (Math.random() - 0.5) * 0.32));
+
+  // Attach linguistic profile derived from the original question text
+  const linguistic = analyzeLinguistics(question);
+  parsed.syllableAvg   = linguistic.avgSyllables;
+  parsed.syllableTotal = linguistic.totalSyllables;
+  parsed.dominantRoot  = linguistic.dominantRoot ?? undefined;
 
   return parsed;
 }

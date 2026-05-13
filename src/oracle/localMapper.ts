@@ -1,4 +1,5 @@
-import type { OracleResponse, AffectFamily, Elemental, Archetypal } from './types';
+import type { OracleResponse, AffectFamily, Elemental, Archetypal, RootFamily } from './types';
+import { analyzeLinguistics } from './linguisticAnalyzer';
 
 // Keyword affect scoring
 const KEYWORD_WEIGHTS: Record<AffectFamily, [string[], number]> = {
@@ -319,7 +320,15 @@ function truncateFragment(f: string): string {
   return words.slice(0, 7).join(' ');
 }
 
+const ROOT_ELEMENTAL_MAP: Record<RootFamily, (arousal: number) => Elemental> = {
+  latin:          (a) => a > 0.5 ? 'metal'  : 'light',
+  greek:          (a) => a > 0.5 ? 'void'   : 'air',
+  germanic:       (a) => a > 0.5 ? 'fire'   : 'earth',
+  arabic_sanskrit:(a) => a > 0.5 ? 'shadow' : 'water',
+};
+
 export function mapLocally(question: string): OracleResponse {
+  const linguistic = analyzeLinguistics(question);
   const q = question.toLowerCase();
   const words = q.split(/[\s,!?.]+/).filter(Boolean);
 
@@ -360,7 +369,11 @@ export function mapLocally(question: string): OracleResponse {
     secondaryFamily = (sorted[3]?.[0] || 'peace') as AffectFamily;
   }
 
-  const arousal = detectArousal(question);
+  // Syllable modifier on arousal
+  const { avgSyllables, totalSyllables, dominantRoot } = linguistic;
+  const syllArousalMod = avgSyllables < 1.4 ? 0.15 : avgSyllables > 2.2 ? -0.12 : 0;
+
+  const arousal = Math.max(0.05, Math.min(1.0, detectArousal(question) + syllArousalMod));
 
   // Valence from primary affect with arousal influence and noise
   const baseValence = VALENCE_MAP[primaryFamily] ?? 0;
@@ -368,18 +381,27 @@ export function mapLocally(question: string): OracleResponse {
     baseValence + (arousal - 0.5) * 0.15 + (Math.random() - 0.5) * 0.38
   ));
 
-  // Certainty with noise
+  // Certainty with noise + syllable modifier
   const doubtWords = ['maybe','perhaps','might','could','unsure','know','if','wonder'];
   const hasDoubt = doubtWords.some(w => q.includes(w));
+  const syllCertaintyMod = (totalSyllables < 5 ? -0.10 : totalSyllables > 15 ? 0.08 : 0)
+    + (avgSyllables - 2.0) * 0.06;
   const certainty = Math.max(0.05, Math.min(0.95,
     0.6 - (words.length / 40) * 0.3 + (hasDoubt ? -0.15 : 0.1) + (Math.random() - 0.5) * 0.42
+    + syllCertaintyMod
   ));
 
-  // 30% chance of a fully random elemental to break predictability
+  // Elemental: root family overrides ~65% of the time when dominant root is clear
   const allElementals: Elemental[] = ['fire', 'water', 'earth', 'air', 'void', 'metal', 'light', 'shadow'];
-  const elemental: Elemental = Math.random() < 0.3
-    ? allElementals[Math.floor(Math.random() * allElementals.length)]
-    : (ELEMENTAL_MAP[primaryFamily] || 'void');
+  let elemental: Elemental;
+  if (dominantRoot && Math.random() < 0.65) {
+    elemental = ROOT_ELEMENTAL_MAP[dominantRoot](arousal);
+  } else if (Math.random() < 0.3) {
+    elemental = allElementals[Math.floor(Math.random() * allElementals.length)];
+  } else {
+    elemental = ELEMENTAL_MAP[primaryFamily] || 'void';
+  }
+
   const archetypal: Archetypal = selectArchetypal(elemental, certainty, primaryFamily);
   const fragment = truncateFragment(pickFragment(primaryFamily));
 
@@ -392,5 +414,8 @@ export function mapLocally(question: string): OracleResponse {
     elemental,
     archetypal,
     fragment,
+    syllableAvg: avgSyllables,
+    syllableTotal: totalSyllables,
+    dominantRoot: dominantRoot ?? undefined,
   };
 }

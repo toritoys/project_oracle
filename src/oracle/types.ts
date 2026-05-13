@@ -15,6 +15,8 @@ export type ShapeType = 'fibonacci' | 'lissajous' | 'rose' | 'hypocycloid' | 'in
 
 export type PatternType = 'voronoi' | 'flow' | 'fibonacci_tiling' | 'interference_rings' | 'fractal_dust';
 
+export type RootFamily = 'latin' | 'greek' | 'germanic' | 'arabic_sanskrit';
+
 export interface OracleResponse {
   primary_affect: AffectFamily;
   secondary_affect: AffectFamily;
@@ -24,6 +26,10 @@ export interface OracleResponse {
   elemental: Elemental;
   archetypal: Archetypal;
   fragment: string;
+  // Linguistic enrichment (filled by analyzeLinguistics on the raw question)
+  syllableAvg?: number;
+  syllableTotal?: number;
+  dominantRoot?: RootFamily;
 }
 
 export interface ColorPair {

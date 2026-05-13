@@ -67,7 +67,8 @@ function deriveBase(response: OracleResponse): { h: number; s: number; v: number
 
 // Three perceptually distinct colors — one per oracle step
 export function deriveThreeColors(response: OracleResponse): [string, string, string] {
-  const seed = Math.round(response.arousal * 11117 + response.certainty * 7331 + Math.abs(response.valence) * 4909);
+  const syllTerm = Math.round((response.syllableTotal ?? 0) * 137);
+  const seed = Math.round(response.arousal * 11117 + response.certainty * 7331 + Math.abs(response.valence) * 4909) + syllTerm;
   const rng  = mulberry32(seed);
 
   // 50% chance: use nibble-randomized colors for maximum variety
@@ -112,7 +113,8 @@ export function deriveThreeColors(response: OracleResponse): [string, string, st
 
 export function deriveColors(response: OracleResponse): ColorPair {
   const { h, s, v } = deriveBase(response);
-  const seed = Math.round(response.certainty * 9871 + response.arousal * 6199);
+  const syllTerm = Math.round((response.syllableAvg ?? 0) * 1000 * 89);
+  const seed = Math.round(response.certainty * 9871 + response.arousal * 6199) + syllTerm;
   const rng = mulberry32(seed);
   const hOff = rng() < 0.5 ? 140 + rng() * 40 : -(140 + rng() * 40);
   return {

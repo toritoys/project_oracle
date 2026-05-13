@@ -28,7 +28,7 @@ function drawFibonacci(
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
   const opacity = Math.min(1, t * 0.8);
-  const seed = Math.round(response.arousal * 8191 + response.certainty * 5003 + 17);
+  const seed = Math.round(response.arousal * 8191 + response.certainty * 5003 + 17) + Math.round((response.syllableTotal ?? 0) * 73);
   const rng = mulberry32(seed);
 
   const phi = 1.618;
@@ -91,7 +91,7 @@ function drawLissajous(
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
   const opacity = Math.min(1, t * 1.2);
-  const seed = Math.round(response.arousal * 9431 + response.certainty * 6173 + Math.abs(response.valence) * 3847 + 11);
+  const seed = Math.round(response.arousal * 9431 + response.certainty * 6173 + Math.abs(response.valence) * 3847 + 11) + Math.round((response.syllableTotal ?? 0) * 73);
   const rng = mulberry32(seed);
 
   // Small-integer frequency ratios → beautiful closed/near-closed curves
@@ -155,7 +155,7 @@ function drawRose(
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
   const [pr, pg, pb] = hexToRgb(colors.primary);
-  const seed = Math.round(response.arousal * 7919 + response.certainty * 4337 + Math.abs(response.valence) * 2311 + 77);
+  const seed = Math.round(response.arousal * 7919 + response.certainty * 4337 + Math.abs(response.valence) * 2311 + 77) + Math.round((response.syllableTotal ?? 0) * 73);
   const rng = mulberry32(seed);
 
   // Primary rose integer
@@ -222,7 +222,7 @@ function drawHypocycloid(
   colors: ColorPair, response: OracleResponse, t: number
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
-  const seed = Math.round(response.certainty * 9001 + response.arousal * 6007 + 33);
+  const seed = Math.round(response.certainty * 9001 + response.arousal * 6007 + 33) + Math.round((response.syllableTotal ?? 0) * 73);
   const rng = mulberry32(seed);
 
   // Non-integer ratio gives open spirograph that never repeats (or repeats slowly)
@@ -272,7 +272,7 @@ function drawInterference(
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
   const opacity = Math.min(1, t * 0.7);
-  const seed = Math.round(response.valence * 5039 + response.arousal * 3571 + 99);
+  const seed = Math.round(response.valence * 5039 + response.arousal * 3571 + 99) + Math.round((response.syllableTotal ?? 0) * 73);
   const rng = mulberry32(seed);
 
   const drift = radius * 0.38;
@@ -333,7 +333,7 @@ function drawEpitrochoid(
   colors: ColorPair, response: OracleResponse, t: number
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
-  const seed = Math.round(response.arousal * 8677 + response.certainty * 5431 + Math.abs(response.valence) * 2999 + 55);
+  const seed = Math.round(response.arousal * 8677 + response.certainty * 5431 + Math.abs(response.valence) * 2999 + 55) + Math.round((response.syllableTotal ?? 0) * 73);
   const rng = mulberry32(seed);
 
   const R = radius * (0.42 + rng() * 0.15);
@@ -382,7 +382,7 @@ function drawAttractor(
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
   const vertices: Array<{ x: number; y: number }> = [];
-  const seed = Math.round(response.arousal * 6143 + response.certainty * 4093 + 7);
+  const seed = Math.round(response.arousal * 6143 + response.certainty * 4093 + 7) + Math.round((response.syllableTotal ?? 0) * 73);
   const rng = mulberry32(seed);
 
   // Dadras system: dx = y - a*x + b*y*z, dy = c*y - x*z + z, dz = d*x*y - e*z
@@ -423,7 +423,7 @@ function drawPhyllotaxis(
 ): ShapeResult {
   const [r1, g1, b1] = hexToRgb(colors.secondary);
   const [r2, g2, b2] = hexToRgb(colors.primary);
-  const seed = Math.round(response.arousal * 7523 + response.certainty * 3761 + 29);
+  const seed = Math.round(response.arousal * 7523 + response.certainty * 3761 + 29) + Math.round((response.syllableTotal ?? 0) * 73);
   const rng = mulberry32(seed);
 
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
@@ -464,7 +464,7 @@ function drawSuperformula(
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
   const opacity = Math.min(1, t * 0.8);
-  const seed = Math.round(response.arousal * 7919 + response.valence * 3167 + response.certainty * 1009 + 42);
+  const seed = Math.round(response.arousal * 7919 + response.valence * 3167 + response.certainty * 1009 + 42) + Math.round((response.syllableTotal ?? 0) * 73);
   const rng = mulberry32(seed);
 
   const sf = (m: number, n1: number, n2: number, n3: number, theta: number) => {
@@ -527,7 +527,7 @@ function drawModularCircle(
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
   const opacity = Math.min(1, t * 0.65);
-  const seed = Math.round(response.certainty * 8887 + response.arousal * 5309 + 13);
+  const seed = Math.round(response.certainty * 8887 + response.arousal * 5309 + 13) + Math.round((response.syllableTotal ?? 0) * 73);
   const rng = mulberry32(seed);
 
   const nOptions = [55, 89, 144];
