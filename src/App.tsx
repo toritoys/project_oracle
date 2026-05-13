@@ -49,91 +49,6 @@ function generateStepBackground(color: string, size: number): HTMLCanvasElement 
   return canvas;
 }
 
-// Patronus spirit: animated smoke wisps dancing in the ball (step 0)
-function drawPatronus(
-  ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number,
-  color: string, now: number
-) {
-  const [r, g, b] = hexToRgb(color);
-  const T = now / 1000;
-
-  // Core glow
-  const coreGrad = ctx.createRadialGradient(cx, cy - radius * 0.04, 0, cx, cy, radius * 0.42);
-  coreGrad.addColorStop(0, `rgba(${r},${g},${b},0.52)`);
-  coreGrad.addColorStop(0.45, `rgba(${r},${g},${b},0.16)`);
-  coreGrad.addColorStop(1, `rgba(${r},${g},${b},0)`);
-  ctx.fillStyle = coreGrad;
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius * 0.42, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Tier 1: large flowing "wings" (3 wide bezier wisps)
-  ctx.lineCap = 'round';
-  for (let w = 0; w < 3; w++) {
-    const baseA = (w / 3) * Math.PI * 2 + T * 0.14;
-    const breath = Math.sin(T * 0.55 + w * 2.1) * 0.11;
-    const reach = (0.60 + breath) * radius;
-    const angle = baseA + Math.sin(T * 0.38 + w) * 0.38;
-    const endX = cx + Math.cos(angle) * reach;
-    const endY = cy + Math.sin(angle) * reach - radius * 0.05;
-    const perpA = angle + Math.PI / 2;
-    const c1 = Math.sin(T * 0.75 + w * 1.3) * 0.22;
-    const c2 = Math.cos(T * 0.65 + w * 0.9) * 0.18;
-    const len = reach;
-    const cp1x = cx + Math.cos(angle + c1) * len * 0.32 + Math.cos(perpA) * radius * 0.19;
-    const cp1y = cy + Math.sin(angle + c1) * len * 0.32 + Math.sin(perpA) * radius * 0.19;
-    const cp2x = endX - Math.cos(angle + c2) * radius * 0.24 - Math.cos(perpA) * radius * 0.12;
-    const cp2y = endY - Math.sin(angle + c2) * radius * 0.24 - Math.sin(perpA) * radius * 0.12;
-    const alpha = 0.26 + Math.abs(Math.sin(T * 0.48 + w * 1.7)) * 0.22;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, endX, endY);
-    ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
-    ctx.lineWidth = 4.5 + Math.sin(T * 0.85 + w) * 2.5;
-    ctx.stroke();
-    // Tip glow
-    ctx.beginPath();
-    ctx.arc(endX, endY, 5.5 + Math.abs(Math.sin(T * 1.1 + w)) * 3, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(${r},${g},${b},${alpha * 0.55})`;
-    ctx.fill();
-  }
-
-  // Tier 2: medium secondary wisps (5 narrower curls)
-  for (let k = 0; k < 5; k++) {
-    const baseA = (k / 5) * Math.PI * 2 + T * 0.28 + Math.PI * 0.18;
-    const len = (0.38 + Math.sin(T * 1.1 + k * 1.4) * 0.1) * radius;
-    const angle = baseA + Math.sin(T * 1.05 + k * 0.8) * 0.48;
-    const endX = cx + Math.cos(angle) * len;
-    const endY = cy + Math.sin(angle) * len;
-    const perpA = angle + Math.PI / 2;
-    const cpX = cx + Math.cos(angle) * len * 0.5 + Math.cos(perpA) * radius * (0.09 + Math.sin(T * 1.4 + k) * 0.06);
-    const cpY = cy + Math.sin(angle) * len * 0.5 + Math.sin(perpA) * radius * (0.09 + Math.cos(T * 1.4 + k) * 0.06);
-    const alpha = 0.11 + Math.abs(Math.sin(T * 1.25 + k * 0.6)) * 0.17;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.quadraticCurveTo(cpX, cpY, endX, endY);
-    ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
-    ctx.lineWidth = 1.4 + Math.abs(Math.sin(T * 0.9 + k)) * 1.1;
-    ctx.stroke();
-  }
-
-  // Tier 3: fine trailing smoke tendrils (7 thin wisps)
-  for (let j = 0; j < 7; j++) {
-    const phase = T * (0.9 + j * 0.04) + j * (Math.PI * 2 / 7) + T * 0.55;
-    const len = (0.2 + Math.abs(Math.sin(phase * 0.4 + j)) * 0.25) * radius;
-    const angle = (j / 7) * Math.PI * 2 + Math.sin(T * 0.7 + j * 0.55) * 0.6;
-    const endX = cx + Math.cos(angle) * len;
-    const endY = cy + Math.sin(angle) * len;
-    const alpha = 0.07 + Math.abs(Math.sin(T * 1.6 + j)) * 0.1;
-    ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(angle) * radius * 0.06, cy + Math.sin(angle) * radius * 0.06);
-    ctx.lineTo(endX, endY);
-    ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
-    ctx.lineWidth = 0.8 + Math.random() * 0.5;
-    ctx.stroke();
-  }
-}
-
 export default function OracleApp() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const tRef = useRef(t);
@@ -170,6 +85,9 @@ export default function OracleApp() {
   const defaultGlowRef = useRef(TWEAK_DEFAULTS.glowColor);
   const releaseSmokeRef = useRef<() => void>(() => {});
   const traceHistoryRef = useRef<Array<{ x: number; y: number; t: number }>>([]);
+  const pingPongRef = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
+  const pingPongTrailRef = useRef<HTMLCanvasElement | null>(null);
+  const shapeVerticesRef = useRef<Array<{ x: number; y: number }>>([]);
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
@@ -389,13 +307,24 @@ export default function OracleApp() {
         requestAnimationFrame(rf);
 
       } else if (oracle.step === 2) {
-        // Shape: spark burst (small glow dots, word-like physics)
+        // Shape: spark burst emitted from shape vertices so particles trace the shape
         const burst = Math.floor(120 * cfg.smokeDensity);
+        const sverts2 = shapeVerticesRef.current;
+        const scEl2 = shapeCanvasRef.current;
+        const scCxR = scEl2 ? scEl2.width / 2 : bx;
+        const scCyR = scEl2 ? scEl2.height / 2 : by;
         for (let i = 0; i < burst; i++) {
           const ang = Math.random() * Math.PI * 2;
           const sp = 2 + Math.random() * 6;
+          let px = bx + (Math.random() - 0.5) * br * 0.8;
+          let py = by + (Math.random() - 0.5) * br * 0.8;
+          if (sverts2.length > 0) {
+            const v = sverts2[Math.floor(Math.random() * sverts2.length)];
+            px = bx + (v.x - scCxR);
+            py = by + (v.y - scCyR);
+          }
           s.particles.push({
-            x: bx + (Math.random() - 0.5) * br * 0.8, y: by + (Math.random() - 0.5) * br * 0.8,
+            x: px, y: py,
             vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 0.35,
             size: 1.5 + Math.random() * 5, growth: 0, life: 1.0,
             decay: 0.007 + Math.random() * 0.01,
@@ -410,6 +339,9 @@ export default function OracleApp() {
 
       setBallOpacity(0);
       traceHistoryRef.current.length = 0;
+      pingPongRef.current = null;
+      pingPongTrailRef.current = null;
+      shapeVerticesRef.current = [];
       const nextStep = oracle.step + 1;
 
       if (nextStep > 2) {
@@ -487,6 +419,9 @@ export default function OracleApp() {
     timersRef.current.forEach(clearTimeout); timersRef.current = [];
     oracleSeqRef.current = null;
     traceHistoryRef.current.length = 0;
+    pingPongRef.current = null;
+    pingPongTrailRef.current = null;
+    shapeVerticesRef.current = [];
     const s = stateRef.current;
     for (const p of s.particles) p.decay = 0.08;
     setTweak('glowColor', defaultGlowRef.current);
@@ -628,9 +563,19 @@ export default function OracleApp() {
                 type: 'word', text, font: wFont,
               });
             } else {
-              // Shape drag: sparks (small glowing dots, word-like physics, varying size)
+              // Shape drag: sparks emitted from shape vertices so they follow the shape's contour
+              const sverts = shapeVerticesRef.current;
+              const scEl = shapeCanvasRef.current;
+              const scCxD = scEl ? scEl.width / 2 : bx;
+              const scCyD = scEl ? scEl.height / 2 : by;
+              let px = ox, py = oy;
+              if (sverts.length > 0) {
+                const v = sverts[Math.floor(Math.random() * sverts.length)];
+                px = bx + (v.x - scCxD);
+                py = by + (v.y - scCyD);
+              }
               s.particles.push({
-                x: ox + (Math.random()-0.5)*br*0.18, y: oy + (Math.random()-0.5)*br*0.18,
+                x: px, y: py,
                 vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp - 0.2,
                 size: 1.2 + Math.random() * 5.8, growth: 0, life: 1.0,
                 decay: 0.009 + Math.random()*0.01,
@@ -676,8 +621,58 @@ export default function OracleApp() {
           const scCx = sc.width/2, scCy = sc.height/2;
 
           if (oracle && oracle.step === 0 && currPhase === 'rendering') {
-            // Patronus spirit dances in the ball
-            drawPatronus(sctx, scCx, scCy, sc.width * 0.44, oracle.colors[0], now);
+            // Ping-pong smoke ball bouncing inside the globe, filling it with trailing glow
+            const [sr0, sg0, sb0] = hexToRgb(oracle.colors[0]);
+            // Init/resize persistent trail canvas
+            if (!pingPongTrailRef.current ||
+                pingPongTrailRef.current.width !== sc.width ||
+                pingPongTrailRef.current.height !== sc.height) {
+              const tc = document.createElement('canvas');
+              tc.width = sc.width; tc.height = sc.height;
+              pingPongTrailRef.current = tc;
+              pingPongRef.current = null;
+            }
+            if (!pingPongRef.current) {
+              const ang0 = Math.random() * Math.PI * 2;
+              const spd0 = 3.8 + Math.random() * 2.2;
+              pingPongRef.current = {
+                x: scCx + (Math.random() - 0.5) * sc.width * 0.22,
+                y: scCy + (Math.random() - 0.5) * sc.height * 0.22,
+                vx: Math.cos(ang0) * spd0, vy: Math.sin(ang0) * spd0,
+              };
+            }
+            const pp = pingPongRef.current;
+            const tc = pingPongTrailRef.current!;
+            const tctx = tc.getContext('2d')!;
+            const ppLimit = sc.width * 0.40;
+            pp.x += pp.vx; pp.y += pp.vy;
+            const ppDist = Math.hypot(pp.x - scCx, pp.y - scCy);
+            if (ppDist > ppLimit) {
+              const nx = (pp.x - scCx) / ppDist, ny = (pp.y - scCy) / ppDist;
+              const dot = pp.vx * nx + pp.vy * ny;
+              if (dot > 0) { pp.vx -= 2 * dot * nx * 0.96; pp.vy -= 2 * dot * ny * 0.96; }
+              pp.x = scCx + nx * (ppLimit - 1); pp.y = scCy + ny * (ppLimit - 1);
+            }
+            const ppSpd = Math.hypot(pp.vx, pp.vy);
+            if (ppSpd < 3.5) { pp.vx *= 3.5 / ppSpd; pp.vy *= 3.5 / ppSpd; }
+            if (ppSpd > 6.5) { pp.vx *= 6.5 / ppSpd; pp.vy *= 6.5 / ppSpd; }
+            // Very slow fade so trail smoke fills the globe over time
+            tctx.fillStyle = 'rgba(0,0,0,0.010)';
+            tctx.fillRect(0, 0, tc.width, tc.height);
+            const bloom = tctx.createRadialGradient(pp.x, pp.y, 0, pp.x, pp.y, 22);
+            bloom.addColorStop(0, `rgba(${sr0},${sg0},${sb0},0.52)`);
+            bloom.addColorStop(0.5, `rgba(${sr0},${sg0},${sb0},0.18)`);
+            bloom.addColorStop(1, `rgba(${sr0},${sg0},${sb0},0)`);
+            tctx.fillStyle = bloom;
+            tctx.beginPath(); tctx.arc(pp.x, pp.y, 22, 0, Math.PI * 2); tctx.fill();
+            sctx.clearRect(0, 0, sc.width, sc.height);
+            sctx.drawImage(tc, 0, 0);
+            const ballGrad = sctx.createRadialGradient(pp.x, pp.y, 0, pp.x, pp.y, 10);
+            ballGrad.addColorStop(0, `rgba(255,255,255,0.9)`);
+            ballGrad.addColorStop(0.3, `rgba(${sr0},${sg0},${sb0},0.95)`);
+            ballGrad.addColorStop(1, `rgba(${sr0},${sg0},${sb0},0)`);
+            sctx.fillStyle = ballGrad;
+            sctx.beginPath(); sctx.arc(pp.x, pp.y, 10, 0, Math.PI * 2); sctx.fill();
 
           } else if (oracle && oracle.step === 2 && currPhase === 'rendering') {
             // Mathematical shape + tracing light
@@ -685,6 +680,7 @@ export default function OracleApp() {
             const scR = sc.width * 0.4;
             const shapeColors = { primary: oracle.colors[2], secondary: oracle.colors[2] };
             const result = drawShape(sctx, scCx, scCy, scR, shapeColors, oracle.response, shapeTime, oracle.shapeType);
+            shapeVerticesRef.current = result.vertices;
 
             sctx.save();
             sctx.globalAlpha = 0.12;
@@ -897,7 +893,7 @@ export default function OracleApp() {
   );
 }
 
-// ── Language pools ─────────────────────────────────────────────────────────────
+// ── English word pools ──────────────────────────────────────────────────────────
 const FONT_SIZES = [11, 13, 14, 16, 18, 20, 22];
 const FONT_FAMILIES = [
   'Cinzel, serif',
@@ -909,41 +905,27 @@ const FONT_FAMILIES = [
   'Palatino, serif',
 ];
 
-const KR_WORDS = ['빛', '그림자', '바람', '물', '불', '꿈', '비밀', '영혼', '시간', '기억', '마음', '눈물', '별', '달', '하늘', '길', '침묵', '고요', '경계', '거울'];
-
-const OTHER_WORDS: Array<{ text: string; cjk: boolean }> = [
-  // Japanese
-  { text: '光', cjk: true }, { text: '影', cjk: true }, { text: '夢', cjk: true },
-  { text: '心', cjk: true }, { text: '空', cjk: true }, { text: '時', cjk: true },
-  // French
-  { text: 'lumière', cjk: false }, { text: 'ombre', cjk: false }, { text: 'rêve', cjk: false }, { text: 'âme', cjk: false },
-  // German
-  { text: 'Licht', cjk: false }, { text: 'Schatten', cjk: false }, { text: 'Stille', cjk: false }, { text: 'Traum', cjk: false },
-  // Portuguese
-  { text: 'luz', cjk: false }, { text: 'sombra', cjk: false }, { text: 'sonho', cjk: false }, { text: 'silêncio', cjk: false },
+const POSH_WORDS = [
+  'ephemeral', 'luminous', 'ethereal', 'gossamer', 'iridescent', 'ineffable',
+  'melancholy', 'languor', 'penumbra', 'reverie', 'phosphorescent', 'evanescent',
+  'quintessence', 'nebulous', 'diaphanous', 'celestial', 'elysian', 'chiaroscuro',
+  'incandescent', 'tenebrous', 'crepuscular', 'numinous', 'refulgent', 'scintilla',
+  'lacuna', 'quiescent', 'susurrus', 'palimpsest', 'sempiternal', 'zephyr',
+  'incarnadine', 'peregrine', 'vestige', 'halcyon', 'liminal', 'transcendent',
+  'umbra', 'aether', 'phantasm', 'cerulean', 'viridian', 'amaranthine',
+  'pellucid', 'lambent', 'welkin', 'firmament', 'empyrean', 'sidereal',
+  'coruscate', 'aureate', 'eldritch', 'abyssal', 'sanctum', 'revenant',
+  'labyrinthine', 'iridescence', 'luminescence', 'solstice', 'serendipity',
+  'tenebrosity', 'adumbrate', 'caliginous', 'interstice', 'lucent', 'sublime',
+  'resplendent', 'scintillate', 'noctilucent', 'crepuscle', 'wraith', 'astral',
 ];
 
 function pickWordParticle(fragment: string): { text: string; font: string } {
   const sz = FONT_SIZES[Math.floor(Math.random() * FONT_SIZES.length)];
-  const rng = Math.random();
-  if (rng < 0.60) {
-    const words = fragment.split(/\s+/).filter(Boolean);
-    return {
-      text: words[Math.floor(Math.random() * words.length)],
-      font: `${sz}px ${FONT_FAMILIES[Math.floor(Math.random() * FONT_FAMILIES.length)]}`,
-    };
-  } else if (rng < 0.80) {
-    return {
-      text: KR_WORDS[Math.floor(Math.random() * KR_WORDS.length)],
-      font: `${sz}px 'Noto Serif KR', serif`,
-    };
-  } else {
-    const item = OTHER_WORDS[Math.floor(Math.random() * OTHER_WORDS.length)];
-    return {
-      text: item.text,
-      font: `${sz}px ${item.cjk ? "'Noto Serif JP', serif" : FONT_FAMILIES[Math.floor(Math.random() * FONT_FAMILIES.length)]}`,
-    };
-  }
+  const font = `${sz}px ${FONT_FAMILIES[Math.floor(Math.random() * FONT_FAMILIES.length)]}`;
+  const fragmentWords = fragment.split(/\s+/).filter(Boolean);
+  const pool = [...fragmentWords, ...POSH_WORDS];
+  return { text: pool[Math.floor(Math.random() * pool.length)], font };
 }
 
 function wordColor(baseHex: string, idx: number): [number, number, number] {
@@ -951,36 +933,22 @@ function wordColor(baseHex: string, idx: number): [number, number, number] {
   return hexToRgb(hslToHex(h + ((idx * 23) % 50) - 25, clamp(s, 30, 98), clamp(l, 35, 98)));
 }
 
-// Preview words seeded inside the ball with marble-like velocities (60/20/20 mix)
+// Preview words seeded inside the ball with marble-like velocities (all English)
 function emitPreviewWords(
   fragment: string, color: string, particles: Particle[],
   bx: number, by: number, br: number
 ) {
-  const englishWords = fragment.split(/\s+/).filter(Boolean);
-  const nKr = Math.max(1, Math.round(englishWords.length * 0.35));
-  const nOther = Math.max(1, Math.round(englishWords.length * 0.35));
+  const fragmentWords = fragment.split(/\s+/).filter(Boolean);
+  const pool = [...fragmentWords, ...POSH_WORDS];
+  const n = Math.max(10, fragmentWords.length * 4);
 
-  const allItems: Array<{ text: string; font: string }> = [];
-  for (const w of englishWords) {
+  for (let i = 0; i < n; i++) {
+    const text = pool[Math.floor(Math.random() * pool.length)];
     const sz = FONT_SIZES[Math.floor(Math.random() * FONT_SIZES.length)];
-    allItems.push({ text: w, font: `${sz}px ${FONT_FAMILIES[Math.floor(Math.random() * FONT_FAMILIES.length)]}` });
-  }
-  for (let i = 0; i < nKr; i++) {
-    const sz = FONT_SIZES[Math.floor(Math.random() * FONT_SIZES.length)];
-    allItems.push({ text: KR_WORDS[Math.floor(Math.random() * KR_WORDS.length)], font: `${sz}px 'Noto Serif KR', serif` });
-  }
-  for (let i = 0; i < nOther; i++) {
-    const item = OTHER_WORDS[Math.floor(Math.random() * OTHER_WORDS.length)];
-    const sz = FONT_SIZES[Math.floor(Math.random() * FONT_SIZES.length)];
-    allItems.push({ text: item.text, font: `${sz}px ${item.cjk ? "'Noto Serif JP', serif" : FONT_FAMILIES[Math.floor(Math.random() * FONT_FAMILIES.length)]}` });
-  }
-
-  allItems.forEach((item, i) => {
-    // Position scattered throughout ball interior
-    const angle = (i / allItems.length) * Math.PI * 2 + (Math.random() - 0.5) * 1.8;
+    const font = `${sz}px ${FONT_FAMILIES[Math.floor(Math.random() * FONT_FAMILIES.length)]}`;
+    const angle = (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 1.8;
     const dist = (0.1 + Math.random() * 0.55) * br * 0.78;
     const [r, g, b] = wordColor(color, i);
-    // Marble-appropriate: random direction, gentle speed, no curl
     const spd = 0.7 + Math.random() * 1.5;
     const spAng = Math.random() * Math.PI * 2;
     particles.push({
@@ -990,7 +958,7 @@ function emitPreviewWords(
       size: 0, growth: 0,
       life: 1.0, decay: 0.0006,
       r, g, b, curl: 0,
-      type: 'word', text: item.text, font: item.font,
+      type: 'word', text, font,
     });
-  });
+  }
 }

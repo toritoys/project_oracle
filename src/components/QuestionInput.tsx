@@ -10,12 +10,10 @@ interface Props {
 export function QuestionInput({ phase, onSubmit, hasGroqKey }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const isLocked = phase === 'questioning' || phase === 'rendering' || phase === 'dissolving';
-  const isHidden = phase === 'rendering' || phase === 'dissolving' || phase === 'dragging';
+  const isLocked = phase !== 'idle';
+  const isHidden = phase !== 'idle';
 
-  const placeholder = isLocked
-    ? (hasGroqKey ? 'the oracle listens...' : 'the oracle reads...')
-    : 'ask the oracle';
+  const placeholder = hasGroqKey ? 'ask the oracle' : 'ask the oracle';
 
   useEffect(() => {
     if (phase === 'idle' && inputRef.current) {

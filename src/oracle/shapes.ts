@@ -32,7 +32,7 @@ function drawFibonacci(
   colors: ColorPair, _r: OracleResponse, t: number
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
-  const dissolveT = clamp((t - 2) / 2, 0, 1);
+  const dissolveT = 0;
   const opacity = dissolveT > 0 ? 1 - dissolveT : Math.min(1, t * 0.8);
 
   const phi = 1.618;
@@ -72,7 +72,10 @@ function drawFibonacci(
     ctx.setLineDash([]);
   }
 
-  return { vertices, traceHead: { x: lastX, y: lastY } };
+  // Loop trace head along spiral so it never gets stuck at the outer tip
+  const traceTh = (t * 0.55) % 14.0;
+  const traceR = Math.min(0.015 * Math.exp(bVal * traceTh), 1.0);
+  return { vertices, traceHead: { x: cx + Math.cos(traceTh + rotOffset) * traceR * radius, y: cy + Math.sin(traceTh + rotOffset) * traceR * radius } };
 }
 
 // ─── Lissajous Figure ────────────────────────────────────────────────────────
@@ -81,7 +84,7 @@ function drawLissajous(
   colors: ColorPair, response: OracleResponse, t: number
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
-  const dissolveT = clamp((t - 2) / 2, 0, 1);
+  const dissolveT = 0;
   const opacity = dissolveT > 0 ? 1 - dissolveT : Math.min(1, t * 1.2);
 
   const delta = t * 0.35;
@@ -125,7 +128,7 @@ function drawRose(
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
   const [pr, pg, pb] = hexToRgb(colors.primary);
-  const dissolveT = clamp((t - 2) / 2, 0, 1);
+  const dissolveT = 0;
   const k = Math.floor(3 + response.arousal * 5);
   const bloomProgress = dissolveT > 0 ? 1 : clamp(t * 0.6, 0, 1);
   const vertices: Array<{ x: number; y: number }> = [];
@@ -157,11 +160,11 @@ function drawRose(
     ctx.fill();
   }
 
-  // Trace head: tip of current petal
-  const tth = bloomProgress * Math.PI * (k % 2 === 0 ? 4 : 2);
-  const tr_val = Math.cos(k * tth) * radius * 0.8 * (1 - dissolveT * 0.6);
-  const traceHead = { x: cx + Math.cos(tth) * tr_val, y: cy + Math.sin(tth) * tr_val };
-  return { vertices, traceHead };
+  // Trace head loops continuously around the petals regardless of bloom progress
+  const tthMax = Math.PI * (k % 2 === 0 ? 4 : 2);
+  const tthLoop = (t * 0.55) % tthMax;
+  const tr_val = Math.cos(k * tthLoop) * radius * 0.8;
+  return { vertices, traceHead: { x: cx + Math.cos(tthLoop) * tr_val, y: cy + Math.sin(tthLoop) * tr_val } };
 }
 
 // ─── Hypocycloid / Astroid ────────────────────────────────────────────────────
@@ -170,7 +173,7 @@ function drawHypocycloid(
   colors: ColorPair, response: OracleResponse, t: number
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
-  const dissolveT = clamp((t - 2) / 2, 0, 1);
+  const dissolveT = 0;
   const n = Math.floor(3 + response.certainty * 2);
   const a = radius * 0.85;
   const bVal = a / n;
@@ -214,7 +217,7 @@ function drawInterference(
   colors: ColorPair, _resp: OracleResponse, t: number
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
-  const dissolveT = clamp((t - 2) / 2, 0, 1);
+  const dissolveT = 0;
   const opacity = dissolveT > 0 ? 1 - dissolveT : Math.min(1, t * 0.7);
 
   const angle1 = t * 0.18, angle2 = t * 0.11 + Math.PI * 0.7;
@@ -265,7 +268,7 @@ function drawEpitrochoid(
   colors: ColorPair, response: OracleResponse, t: number
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
-  const dissolveT = clamp((t - 2) / 2, 0, 1);
+  const dissolveT = 0;
 
   const R = radius * 0.55;
   const rVal = R / 3;
@@ -304,7 +307,7 @@ function drawAttractor(
   colors: ColorPair, _r: OracleResponse, t: number
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
-  const dissolveT = clamp((t - 2) / 2, 0, 1);
+  const dissolveT = 0;
   const vertices: Array<{ x: number; y: number }> = [];
 
   const sigma = 10, rho = 28, beta = 8 / 3;
@@ -346,7 +349,7 @@ function drawPhyllotaxis(
 ): ShapeResult {
   const [r1, g1, b1] = hexToRgb(colors.secondary);
   const [r2, g2, b2] = hexToRgb(colors.primary);
-  const dissolveT = clamp((t - 2) / 2, 0, 1);
+  const dissolveT = 0;
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   const nMax = Math.floor(100 + response.arousal * 120);
   const c = radius * 0.052;
@@ -380,7 +383,7 @@ function drawSuperformula(
   colors: ColorPair, response: OracleResponse, t: number
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
-  const dissolveT = clamp((t - 2) / 2, 0, 1);
+  const dissolveT = 0;
   const opacity = dissolveT > 0 ? 1 - dissolveT : Math.min(1, t * 0.8);
 
   const rng = mulberry32(Math.round(response.arousal * 7919 + response.valence * 3167 + 42));
@@ -425,7 +428,7 @@ function drawModularCircle(
   colors: ColorPair, response: OracleResponse, t: number
 ): ShapeResult {
   const [r, g, b] = hexToRgb(colors.secondary);
-  const dissolveT = clamp((t - 2) / 2, 0, 1);
+  const dissolveT = 0;
   const opacity = dissolveT > 0 ? 1 - dissolveT : Math.min(1, t * 0.65);
 
   const nOptions = [55, 89, 144];
@@ -464,11 +467,11 @@ function drawModularCircle(
     ctx.fill();
   }
 
-  // Trace head: current chord endpoint
-  const lastI = Math.max(0, revealCount - 1);
-  const lastI2 = (lastI * k) % n;
-  const lastA2 = (lastI2 / n) * Math.PI * 2 + rotOffset;
-  const traceHead = { x: cx + Math.cos(lastA2) * circleR, y: cy + Math.sin(lastA2) * circleR };
+  // Trace head loops through chords continuously
+  const loopI = Math.floor((t * 25) % n);
+  const loopI2 = (loopI * k) % n;
+  const loopA2 = (loopI2 / n) * Math.PI * 2 + rotOffset;
+  const traceHead = { x: cx + Math.cos(loopA2) * circleR, y: cy + Math.sin(loopA2) * circleR };
   return { vertices, traceHead };
 }
 
