@@ -44,7 +44,7 @@ export interface Particle {
   g: number;
   b: number;
   curl: number;
-  type?: 'smoke' | 'word' | 'color';
+  type?: 'smoke' | 'word' | 'color' | 'spark';
   text?: string;
   font?: string;
 }
@@ -53,4 +53,5 @@ export type PhaseState = 'idle' | 'questioning' | 'rendering' | 'dissolving' | '
 
 export interface ShapeResult {
   vertices: Array<{ x: number; y: number }>;
+  traceHead?: { x: number; y: number };
 }
