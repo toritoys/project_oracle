@@ -53,6 +53,9 @@ export interface Particle {
   type?: 'smoke' | 'word' | 'color' | 'spark';
   text?: string;
   font?: string;
+  wordIdx?: number;
+  charIdx?: number;
+  fontSize?: number;
 }
 
 export type PhaseState = 'idle' | 'questioning' | 'rendering' | 'dissolving' | 'settling' | 'dragging';

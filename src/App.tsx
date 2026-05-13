@@ -802,33 +802,58 @@ export default function OracleApp() {
       // ── Particle physics ─────────────────────────────────────────────────
       const ps = s.particles;
 
-      // Word spring chain: each word springs toward the one ahead, head follows cursor
+      // Letter assembly: head letters chain to cursor; non-head letters spring to offset from head
       if (oracle && oracle.step === 1 && currPhase === 'dragging') {
         const wordPs = ps.filter(p => p.type === 'word');
-        if (wordPs.length > 0) {
-          // Head (index 0) attracted to cursor
-          const head = wordPs[0];
-          const hdx = s.cx - head.x, hdy = s.cy - head.y;
+
+        // Collect head letters (charIdx === 0), sorted by wordIdx
+        const heads = wordPs
+          .filter(p => p.charIdx === 0)
+          .sort((a, b) => (a.wordIdx ?? 0) - (b.wordIdx ?? 0));
+
+        if (heads.length > 0) {
+          // Head of first word chases cursor
+          const h0 = heads[0];
+          const hdx = s.cx - h0.x, hdy = s.cy - h0.y;
           const hdist = Math.hypot(hdx, hdy);
-          const pullStr = Math.min(0.18, hdist * 0.008);
-          head.vx += hdx * pullStr; head.vy += hdy * pullStr;
-          head.vx *= 0.80; head.vy *= 0.80;
-          head.x += head.vx; head.y += head.vy;
-          head.life = Math.min(head.life + 0.01, 0.92);
-          // Each follower springs toward the one in front
-          const GAP = 58;
-          for (let wi = 1; wi < wordPs.length; wi++) {
-            const follower = wordPs[wi];
-            const leader = wordPs[wi - 1];
-            const ldx = leader.x - follower.x, ldy = leader.y - follower.y;
+          h0.vx += hdx * Math.min(0.22, hdist * 0.009);
+          h0.vy += hdy * Math.min(0.22, hdist * 0.009);
+          h0.vx *= 0.78; h0.vy *= 0.78;
+          h0.x += h0.vx; h0.y += h0.vy;
+          h0.life = Math.min(h0.life + 0.01, 0.92);
+
+          // Subsequent word heads chain behind the previous head
+          const GAP = 62;
+          for (let wi = 1; wi < heads.length; wi++) {
+            const fh = heads[wi], lh = heads[wi - 1];
+            const ldx = lh.x - fh.x, ldy = lh.y - fh.y;
             const ldist = Math.hypot(ldx, ldy);
             if (ldist > GAP) {
-              const pull = (ldist - GAP) / ldist * 0.20;
-              follower.vx += ldx * pull; follower.vy += ldy * pull;
+              const pull = (ldist - GAP) / ldist * 0.22;
+              fh.vx += ldx * pull; fh.vy += ldy * pull;
             }
-            follower.vx *= 0.80; follower.vy *= 0.80;
-            follower.x += follower.vx; follower.y += follower.vy;
-            follower.life = Math.min(follower.life + 0.01, 0.92);
+            fh.vx *= 0.78; fh.vy *= 0.78;
+            fh.x += fh.vx; fh.y += fh.vy;
+            fh.life = Math.min(fh.life + 0.01, 0.92);
+          }
+
+          // Non-head letters spring to their offset position from their word's head
+          const headMap = new Map(heads.map(h => [h.wordIdx ?? 0, h]));
+          const LETTER_SPACING = 0.62;
+          for (const p of wordPs) {
+            if ((p.charIdx ?? 0) === 0) continue;
+            const head = headMap.get(p.wordIdx ?? 0);
+            if (!head) continue;
+            const spacing = (p.fontSize ?? 14) * LETTER_SPACING;
+            const targetX = head.x + (p.charIdx ?? 0) * spacing;
+            const targetY = head.y;
+            const tdx = targetX - p.x, tdy = targetY - p.y;
+            const tdist = Math.hypot(tdx, tdy);
+            p.vx += tdx * Math.min(0.28, tdist * 0.06);
+            p.vy += tdy * Math.min(0.28, tdist * 0.06);
+            p.vx *= 0.76; p.vy *= 0.76;
+            p.x += p.vx; p.y += p.vy;
+            p.life = Math.min(p.life + 0.01, 0.92);
           }
         }
       }
@@ -836,22 +861,22 @@ export default function OracleApp() {
       for (let i = ps.length - 1; i >= 0; i--) {
         const p = ps[i];
 
-        if (p.type === 'word' && oracle?.step === 1 && currPhase === 'rendering') {
-          // Marble physics: gravity + elastic bounce off ball wall
-          p.vy += 0.075;
-          p.vx *= 0.97; p.vy *= 0.97;
+        if (p.type === 'word' && oracle?.step === 1 && (currPhase === 'rendering' || currPhase === 'idle')) {
+          // Marble physics: gravity + bounce off circular ball wall
+          p.vy += 0.13;
+          p.vx *= 0.91; p.vy *= 0.91;
           p.x += p.vx; p.y += p.vy;
           const pdx = p.x - bx, pdy = p.y - by;
           const pdist = Math.hypot(pdx, pdy);
-          const limit = br * 0.80;
+          const limit = br * 0.82;
           if (pdist > limit) {
             const nx = pdx/pdist, ny = pdy/pdist;
-            const dot = p.vx*nx + p.vy*ny;
-            if (dot > 0) { p.vx -= 2*dot*nx*0.55; p.vy -= 2*dot*ny*0.55; }
             p.x = bx + nx * (limit - 1); p.y = by + ny * (limit - 1);
+            const dot = p.vx*nx + p.vy*ny;
+            if (dot > 0) { p.vx = (p.vx - 2*dot*nx) * 0.42; p.vy = (p.vy - 2*dot*ny) * 0.42; }
           }
         } else if (p.type === 'word' && oracle?.step === 1 && currPhase === 'dragging') {
-          // Spring chain handled above — skip per-particle physics
+          // Assembly spring chain handled above — skip per-particle physics
         } else {
           // Standard smoke/buoyancy physics
           p.vx += (Math.random()-0.5)*0.12 + p.curl*Math.sin(now*0.001+i);
@@ -1082,7 +1107,7 @@ export default function OracleApp() {
 
 // ── Word system — rare English sentences ─────────────────────────────────────
 // Wide size range: small whispers to large declarations
-const FONT_SIZES = [9, 10, 11, 13, 15, 17, 20, 23, 26, 30];
+const FONT_SIZES = [12, 13, 15, 17, 20, 23, 26, 30];
 const FONT_FAMILIES = [
   'Cinzel, serif',
   "'Cormorant Garamond', serif",
@@ -1155,29 +1180,31 @@ function wordColor(baseHex: string, idx: number): [number, number, number] {
   return hexToRgb(hslToHex(h + ((idx * 23) % 50) - 25, clamp(s, 42, 95), clamp(l, 32, 68)));
 }
 
-// Seed the sentence words inside the ball — these form the dragged chain
+// Seed individual letters inside the ball — they drop like marbles, then assemble into words on drag
 function emitPreviewWords(
   _fragment: string, color: string, particles: Particle[],
   bx: number, by: number, br: number
 ) {
   const words = generateSentenceWords();
-  words.forEach((text, i) => {
-    const angle = (i / words.length) * Math.PI * 2 + Math.random() * 0.8;
-    const dist = (0.25 + Math.random() * 0.45) * br * 0.72;
-    // Each word gets a randomized size for visual variety
+  words.forEach((word, wordIdx) => {
+    // All letters in a word share the same font size so spacing math is uniform
     const sz = FONT_SIZES[Math.floor(Math.random() * FONT_SIZES.length)];
     const font = `${sz}px ${FONT_FAMILIES[Math.floor(Math.random() * FONT_FAMILIES.length)]}`;
-    const [r, g, b] = wordColor(color, i);
-    const spd = 0.4 + Math.random() * 1.1;
-    const spAng = Math.random() * Math.PI * 2;
-    particles.push({
-      x: bx + Math.cos(angle) * dist,
-      y: by + Math.sin(angle) * dist,
-      vx: Math.cos(spAng) * spd, vy: Math.sin(spAng) * spd,
-      size: 0, growth: 0,
-      life: 1.0, decay: 0.0005,
-      r, g, b, curl: 0,
-      type: 'word', text, font,
+    const [r, g, b] = wordColor(color, wordIdx);
+    word.split('').forEach((char, charIdx) => {
+      // Stagger drop heights so letters don't all land at once
+      const startX = bx + (Math.random() - 0.5) * br * 0.7;
+      const startY = by - br * 0.6 - charIdx * 5 - Math.random() * br * 0.25;
+      particles.push({
+        x: startX, y: startY,
+        vx: (Math.random() - 0.5) * 1.4,
+        vy: Math.random() * 0.5,
+        size: 0, growth: 0,
+        life: 1.0, decay: 0.0005,
+        r, g, b, curl: 0,
+        type: 'word', text: char, font,
+        wordIdx, charIdx, fontSize: sz,
+      });
     });
   });
 }
