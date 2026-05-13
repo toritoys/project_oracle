@@ -1107,7 +1107,7 @@ export default function OracleApp() {
 
 // ── Word system — rare English sentences ─────────────────────────────────────
 // Wide size range: small whispers to large declarations
-const FONT_SIZES = [18, 20, 23, 26, 30, 35, 40, 48, 60];
+const FONT_SIZES = [30, 36, 42, 50, 58, 68, 80, 95, 110, 130];
 const FONT_FAMILIES = [
   'Cinzel, serif',
   "'Cormorant Garamond', serif",
