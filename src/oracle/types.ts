@@ -1,0 +1,56 @@
+export type AffectFamily =
+  | 'grief' | 'fear' | 'longing' | 'anger' | 'clarity'
+  | 'wonder' | 'dissolution' | 'joy' | 'tension' | 'peace'
+  | 'desire' | 'defiance' | 'hunger' | 'dread' | 'shame'
+  | 'pride' | 'yearning' | 'fury' | 'stillness' | 'vertigo'
+  | 'surrender' | 'awe';
+
+export type Elemental = 'fire' | 'water' | 'earth' | 'air' | 'void' | 'metal' | 'light' | 'shadow';
+
+export type Archetypal =
+  | 'the_threshold' | 'the_wound' | 'the_mirror' | 'the_descent' | 'the_return'
+  | 'the_tower' | 'the_garden' | 'the_fire' | 'the_tide' | 'the_mask' | 'the_void';
+
+export type ShapeType = 'fibonacci' | 'lissajous' | 'rose' | 'hypocycloid' | 'interference' | 'epitrochoid' | 'attractor';
+
+export type PatternType = 'voronoi' | 'flow' | 'fibonacci_tiling' | 'interference_rings' | 'fractal_dust';
+
+export interface OracleResponse {
+  primary_affect: AffectFamily;
+  secondary_affect: AffectFamily;
+  valence: number;
+  arousal: number;
+  certainty: number;
+  elemental: Elemental;
+  archetypal: Archetypal;
+  fragment: string;
+}
+
+export interface ColorPair {
+  primary: string;
+  secondary: string;
+}
+
+export interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  growth: number;
+  life: number;
+  decay: number;
+  r: number;
+  g: number;
+  b: number;
+  curl: number;
+  type?: 'smoke' | 'word' | 'color';
+  text?: string;
+  font?: string;
+}
+
+export type PhaseState = 'idle' | 'questioning' | 'rendering' | 'dissolving' | 'settling' | 'dragging';
+
+export interface ShapeResult {
+  vertices: Array<{ x: number; y: number }>;
+}
