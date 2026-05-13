@@ -735,7 +735,7 @@ export default function OracleApp() {
               const wbx = hx0 + Math.cos(ft0 * 1.2) * 2.5, wby = hy0 + Math.sin(ft0 * 0.9) * 2.5;
               const coreG0 = sctx.createRadialGradient(wbx, wby, 0, hx0, hy0, wob * 2);
               coreG0.addColorStop(0, 'rgba(255,255,255,1.0)');
-              coreG0.addColorStop(0.22, 'rgba(255,250,210,0.95)');
+              coreG0.addColorStop(0.22, `rgba(${Math.min(255,cr0+60)},${Math.min(255,cg0+50)},${Math.min(255,cb0+40)},0.95)`);
               coreG0.addColorStop(0.55, `rgba(${cr0},${cg0},${cb0},0.85)`);
               coreG0.addColorStop(1, `rgba(${cr0},${cg0},${cb0},0)`);
               sctx.fillStyle = coreG0;
@@ -959,36 +959,11 @@ export default function OracleApp() {
             const wbx1 = head1.x + Math.cos(ft1 * 1.2) * 3, wby1 = head1.y + Math.sin(ft1 * 0.9) * 3;
             const coreG1 = ctx.createRadialGradient(wbx1, wby1, 0, head1.x, head1.y, wob1 * 2);
             coreG1.addColorStop(0, 'rgba(255,255,255,1.0)');
-            coreG1.addColorStop(0.2, 'rgba(255,250,210,0.95)');
+            coreG1.addColorStop(0.2, `rgba(${Math.min(255,cr1+60)},${Math.min(255,cg1+50)},${Math.min(255,cb1+40)},0.95)`);
             coreG1.addColorStop(0.55, `rgba(${cr1},${cg1},${cb1},0.85)`);
             coreG1.addColorStop(1, `rgba(${cr1},${cg1},${cb1},0)`);
             ctx.fillStyle = coreG1;
             ctx.beginPath(); ctx.arc(head1.x, head1.y, wob1 * 2, 0, Math.PI * 2); ctx.fill();
-            ctx.restore();
-          }
-        }
-
-        // Step 1 drag: glowing thread connecting chain words
-        if (oracle && oracle.step === 1 && currPhase === 'dragging') {
-          const wordPs2 = ps.filter(p => p.type === 'word');
-          if (wordPs2.length > 1) {
-            const [tr, tg, tb] = hexToRgb(oracle.colors[1]);
-            ctx.save();
-            ctx.globalCompositeOperation = 'screen';
-            // Draw smooth bezier chain through all word positions
-            ctx.strokeStyle = `rgba(${tr},${tg},${tb},0.45)`;
-            ctx.lineWidth = 2;
-            ctx.shadowColor = `rgba(${tr},${tg},${tb},0.6)`;
-            ctx.shadowBlur = 8;
-            ctx.beginPath();
-            ctx.moveTo(wordPs2[0].x, wordPs2[0].y);
-            for (let wi = 1; wi < wordPs2.length; wi++) {
-              const mx = (wordPs2[wi - 1].x + wordPs2[wi].x) / 2;
-              const my = (wordPs2[wi - 1].y + wordPs2[wi].y) / 2;
-              ctx.quadraticCurveTo(wordPs2[wi - 1].x, wordPs2[wi - 1].y, mx, my);
-            }
-            ctx.lineTo(wordPs2[wordPs2.length - 1].x, wordPs2[wordPs2.length - 1].y);
-            ctx.stroke();
             ctx.restore();
           }
         }
@@ -1105,8 +1080,9 @@ export default function OracleApp() {
   );
 }
 
-// ── English word pools ──────────────────────────────────────────────────────────
-const FONT_SIZES = [11, 13, 14, 16, 18, 20, 22];
+// ── Word system — rare English sentences ─────────────────────────────────────
+// Wide size range: small whispers to large declarations
+const FONT_SIZES = [9, 10, 11, 13, 15, 17, 20, 23, 26, 30];
 const FONT_FAMILIES = [
   'Cinzel, serif',
   "'Cormorant Garamond', serif",
@@ -1117,44 +1093,78 @@ const FONT_FAMILIES = [
   'Palatino, serif',
 ];
 
-const POSH_WORDS = [
-  'ephemeral', 'luminous', 'ethereal', 'gossamer', 'iridescent', 'ineffable',
-  'melancholy', 'languor', 'penumbra', 'reverie', 'phosphorescent', 'evanescent',
-  'quintessence', 'nebulous', 'diaphanous', 'celestial', 'elysian', 'chiaroscuro',
-  'incandescent', 'tenebrous', 'crepuscular', 'numinous', 'refulgent', 'scintilla',
-  'lacuna', 'quiescent', 'susurrus', 'palimpsest', 'sempiternal', 'zephyr',
-  'incarnadine', 'peregrine', 'vestige', 'halcyon', 'liminal', 'transcendent',
-  'umbra', 'aether', 'phantasm', 'cerulean', 'viridian', 'amaranthine',
-  'pellucid', 'lambent', 'welkin', 'firmament', 'empyrean', 'sidereal',
-  'coruscate', 'aureate', 'eldritch', 'abyssal', 'sanctum', 'revenant',
-  'labyrinthine', 'iridescence', 'luminescence', 'solstice', 'serendipity',
-  'tenebrosity', 'adumbrate', 'caliginous', 'interstice', 'lucent', 'sublime',
-  'resplendent', 'scintillate', 'noctilucent', 'crepuscle', 'wraith', 'astral',
+// Rare, long, beautiful English word pools by grammatical role
+const W_SUBJ = [
+  'phosphorescence','iridescence','crepuscule','ephemera','penumbra','susurrus',
+  'lacuna','palimpsest','chiaroscuro','gossamer','reverie','soliloquy',
+  'luminescence','opalescence','labyrinth','chrysalis','firmament','confluence',
+  'sibilance','melancholia','quiescence','tenebrosity','sempiternity','cerulean',
+  'umbra','resplendence','pellucidity','incandescence','vertigo','diaphanousness',
+];
+const W_VERB = [
+  'dissolves','illuminates','transcends','consecrates','reverberates','crystallizes',
+  'unravels','shimmers','permeates','emanates','disintegrates','coalesces',
+  'transmutes','oscillates','undulates','precipitates','evaporates','scintillates',
+  'pulses','resonates','fractures','ascends','descends','radiates','coruscates',
+  'suffuses','percolates','obfuscates','sublimâtes','iridescences','refracts',
+];
+const W_ADJ = [
+  'iridescent','phosphorescent','numinous','ineffable','diaphanous','tenebrous',
+  'crepuscular','ethereal','gossamer','incandescent','celestial','mercurial',
+  'evanescent','translucent','lambent','nacreous','aureate','scintillant',
+  'vespertine','sempiternal','pellucid','subliminal','effulgent','labyrinthine',
+  'amaranthine','incarnadine','halcyon','liminal','peregrine','refulgent',
+];
+const W_ADV = [
+  'perpetually','incandescently','luminously','ethereally','silently','endlessly',
+  'ineffably','translucently','ceaselessly','tremulously','iridescently',
+  'languidly','inexorably','pellucidly','lambently','resplendently',
+];
+const W_PREP_OBJ = [
+  'of absence','of luminance','of oblivion','of penumbra','of vertigo',
+  'of iridescence','of silence','of dissolution','of eternity','of refraction',
+  'of phosphorescence','of crepuscule','of incandescence','of lacunae',
 ];
 
-function pickWordParticle(fragment: string): { text: string; font: string } {
+// Sentence templates — word positions correspond to indices 0..N of chain
+const TEMPLATES: Array<() => string[]> = [
+  () => [pick(W_ADJ), pick(W_SUBJ), pick(W_VERB)],
+  () => ['the', pick(W_SUBJ), pick(W_VERB), pick(W_ADV)],
+  () => [pick(W_SUBJ), pick(W_VERB), 'the', pick(W_ADJ), pick(W_SUBJ)],
+  () => [pick(W_ADJ), pick(W_SUBJ), pick(W_PREP_OBJ)],
+  () => [pick(W_VERB), 'the', pick(W_ADJ), pick(W_SUBJ)],
+  () => [pick(W_SUBJ), pick(W_VERB), pick(W_ADV)],
+  () => ['beyond', pick(W_ADJ), pick(W_SUBJ), pick(W_VERB)],
+  () => [pick(W_SUBJ) + ',', pick(W_ADJ), pick(W_SUBJ)],
+];
+
+function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
+
+function generateSentenceWords(): string[] {
+  return TEMPLATES[Math.floor(Math.random() * TEMPLATES.length)]();
+}
+
+function pickWordParticle(_fragment: string): { text: string; font: string } {
   const sz = FONT_SIZES[Math.floor(Math.random() * FONT_SIZES.length)];
   const font = `${sz}px ${FONT_FAMILIES[Math.floor(Math.random() * FONT_FAMILIES.length)]}`;
-  const fragmentWords = fragment.split(/\s+/).filter(Boolean);
-  const pool = [...fragmentWords, ...POSH_WORDS];
-  return { text: pool[Math.floor(Math.random() * pool.length)], font };
+  return { text: pick([...W_SUBJ, ...W_ADJ, ...W_VERB]), font };
 }
 
 function wordColor(baseHex: string, idx: number): [number, number, number] {
   const [h, s, l] = hexToHsl(baseHex);
-  return hexToRgb(hslToHex(h + ((idx * 23) % 50) - 25, clamp(s, 30, 98), clamp(l, 35, 98)));
+  return hexToRgb(hslToHex(h + ((idx * 23) % 50) - 25, clamp(s, 42, 95), clamp(l, 32, 68)));
 }
 
-// Seed exactly the fragment words inside the ball — these form the chain dragged out
+// Seed the sentence words inside the ball — these form the dragged chain
 function emitPreviewWords(
-  fragment: string, color: string, particles: Particle[],
+  _fragment: string, color: string, particles: Particle[],
   bx: number, by: number, br: number
 ) {
-  const fragmentWords = fragment.split(/\s+/).filter(Boolean);
-  // Arrange in a loose cluster inside the ball, ordered so index 0 = chain head
-  fragmentWords.forEach((text, i) => {
-    const angle = (i / fragmentWords.length) * Math.PI * 2 + Math.random() * 0.8;
+  const words = generateSentenceWords();
+  words.forEach((text, i) => {
+    const angle = (i / words.length) * Math.PI * 2 + Math.random() * 0.8;
     const dist = (0.25 + Math.random() * 0.45) * br * 0.72;
+    // Each word gets a randomized size for visual variety
     const sz = FONT_SIZES[Math.floor(Math.random() * FONT_SIZES.length)];
     const font = `${sz}px ${FONT_FAMILIES[Math.floor(Math.random() * FONT_FAMILIES.length)]}`;
     const [r, g, b] = wordColor(color, i);
