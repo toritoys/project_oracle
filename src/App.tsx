@@ -2,13 +2,13 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTweaks, TweaksPanel, TweakSection, TweakSelect, TweakToggle, TweakSlider, TweakColor } from './tweaks-panel';
 import { GENERATORS, generateVision, Vision } from './visions';
 import { queryOracle, getGroqKey } from './oracle/api';
-import { deriveColors } from './oracle/colorEngine';
+import { deriveThreeColors } from './oracle/colorEngine';
 import { drawShape, selectShape } from './oracle/shapes';
 import { drawPattern, selectPattern } from './oracle/patterns';
 import { QuestionInput } from './components/QuestionInput';
 import { GroqSettings } from './components/GroqSettings';
-import { hexToRgb, withAlpha } from './utils';
-import type { PhaseState, Particle, OracleResponse, ColorPair, ShapeType, PatternType } from './oracle/types';
+import { hexToRgb, hexToHsl, hslToHex, withAlpha, clamp } from './utils';
+import type { PhaseState, Particle, OracleResponse, ShapeType, PatternType } from './oracle/types';
 
 const TWEAK_DEFAULTS = {
   glowColor: '#48CAE4',
@@ -19,35 +19,38 @@ const TWEAK_DEFAULTS = {
   trailLength: 0.6,
 };
 
-function generateOracleBackground(colors: ColorPair, size: number): HTMLCanvasElement {
+// step 0=color, 1=words, 2=shape — user drags each out before the next appears
+interface OracleSeqState {
+  step: number;
+  colors: [string, string, string];
+  response: OracleResponse;
+  shapeType: ShapeType;
+  patternType: PatternType;
+  seed: number;
+  shapeStartTime: number;
+}
+
+// Deep tinted dark background — never pure black, always carries the color
+function generateStepBackground(color: string, size: number): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d')!;
-  const [r, g, b] = hexToRgb(colors.primary);
-  const [r2, g2, b2] = hexToRgb(colors.secondary);
-  // Deep background
-  ctx.fillStyle = '#000';
+  const [r, g, b] = hexToRgb(color);
+  // Very dark but tinted base
+  const dr = Math.max(Math.round(r * 0.07), 5);
+  const dg = Math.max(Math.round(g * 0.07), 5);
+  const db = Math.max(Math.round(b * 0.07), 5);
+  ctx.fillStyle = `rgb(${dr},${dg},${db})`;
   ctx.fillRect(0, 0, size, size);
-  // Primary color atmosphere
+  // Rich radial atmosphere
   const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  grad.addColorStop(0, `rgba(${r},${g},${b},0.55)`);
-  grad.addColorStop(0.45, `rgba(${r},${g},${b},0.2)`);
-  grad.addColorStop(0.8, `rgba(${r2},${g2},${b2},0.08)`);
-  grad.addColorStop(1, 'rgba(0,0,0,0.9)');
+  grad.addColorStop(0,    `rgba(${r},${g},${b},0.62)`);
+  grad.addColorStop(0.38, `rgba(${r},${g},${b},0.24)`);
+  grad.addColorStop(0.72, `rgba(${r},${g},${b},0.07)`);
+  grad.addColorStop(1,    `rgba(${dr},${dg},${db},0.94)`);
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size);
   return canvas;
-}
-
-interface OracleState {
-  response: OracleResponse;
-  colors: ColorPair;
-  shapeType: ShapeType;
-  patternType: PatternType;
-  shapeStartTime: number;
-  wordParticlesEmitted: boolean;
-  dissolveParticlesEmitted: boolean;
-  seed: number;
 }
 
 export default function OracleApp() {
@@ -81,7 +84,7 @@ export default function OracleApp() {
     fillColor: [120, 120, 140] as [number, number, number],
   });
 
-  const oracleRef = useRef<OracleState | null>(null);
+  const oracleSeqRef = useRef<OracleSeqState | null>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const defaultGlowRef = useRef(TWEAK_DEFAULTS.glowColor);
   const releaseSmokeRef = useRef<() => void>(() => {});
@@ -178,10 +181,21 @@ export default function OracleApp() {
       if ((e.target as HTMLElement).closest('.groq-settings-btn')) return;
       if ((e.target as HTMLElement).closest('.groq-settings-drawer')) return;
       const curr = phaseRef.current;
-      if (curr === 'rendering' || curr === 'dissolving' || curr === 'settling') {
-        collapseOracle();
+      // Between oracle steps — ignore input during transition
+      if (curr === 'settling') return;
+      // Oracle sequence active: ball drag advances the step, click outside collapses
+      if (curr === 'rendering') {
+        if (oracleSeqRef.current && pointInBall(e.clientX, e.clientY)) {
+          stateRef.current.mx = e.clientX; stateRef.current.my = e.clientY;
+          stateRef.current.pressing = true;
+          setPhase('dragging'); phaseRef.current = 'dragging';
+          setHasInteracted(true);
+        } else {
+          collapseOracle();
+        }
         return;
       }
+      if (curr === 'dissolving') { collapseOracle(); return; }
       if (!pointInBall(e.clientX, e.clientY)) return;
       if (curr !== 'idle') return;
       stateRef.current.mx = e.clientX; stateRef.current.my = e.clientY;
@@ -210,7 +224,19 @@ export default function OracleApp() {
       const t0 = e.touches[0]; if (!t0) return;
       stateRef.current.mx = t0.clientX; stateRef.current.my = t0.clientY;
       const curr = phaseRef.current;
-      if (curr === 'rendering' || curr === 'dissolving' || curr === 'settling') { collapseOracle(); return; }
+      if (curr === 'settling') return;
+      if (curr === 'rendering') {
+        if (oracleSeqRef.current && pointInBall(t0.clientX, t0.clientY)) {
+          stateRef.current.pressing = true;
+          setPhase('dragging'); phaseRef.current = 'dragging';
+          setHasInteracted(true);
+          e.preventDefault();
+        } else {
+          collapseOracle();
+        }
+        return;
+      }
+      if (curr === 'dissolving') { collapseOracle(); return; }
       if (!pointInBall(t0.clientX, t0.clientY) || curr !== 'idle') return;
       stateRef.current.pressing = true;
       setPhase('dragging'); phaseRef.current = 'dragging';
@@ -238,62 +264,209 @@ export default function OracleApp() {
     };
   }, [pointInBall]);
 
-  // ── Release smoke (drag interaction) ─────────────────────────────────────
+  // ── Release smoke ─────────────────────────────────────────────────────────
   const releaseSmoke = useCallback(() => {
     const s = stateRef.current;
     const cfg = tRef.current;
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
     setPhase('settling'); phaseRef.current = 'settling';
-    const palette = currentVision ? currentVision.palette : ['#222', '#888', '#aaa'];
-    const colors = palette.slice(1).map(hexToRgb);
-    s.fillColor = colors[Math.floor(colors.length / 2)] as [number, number, number] || s.fillColor;
+
+    const oracle = oracleSeqRef.current;
+
+    // Compute ball center at release time
+    const ballEl = ballWrapRef.current;
+    let bx = window.innerWidth / 2, by = window.innerHeight / 2, br = 200;
+    if (ballEl) {
+      const rect = ballEl.getBoundingClientRect();
+      bx = rect.left + rect.width / 2; by = rect.top + rect.height / 2; br = rect.width / 2;
+    }
+
+    if (oracle) {
+      // ── Oracle sequence: emit burst for this step, then advance ────────────
+      const stepColor = oracle.colors[oracle.step];
+      const [sr, sg, sb] = hexToRgb(stepColor);
+
+      if (oracle.step === 0) {
+        // Step 0 (color): large vivid blobs flood screen
+        const burst = Math.floor(110 * cfg.smokeDensity);
+        for (let i = 0; i < burst; i++) {
+          const ang = Math.random() * Math.PI * 2;
+          const sp = 2 + Math.random() * 5.5;
+          s.particles.push({
+            x: bx + (Math.random() - 0.5) * 50, y: by + (Math.random() - 0.5) * 50,
+            vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 0.5,
+            size: 32 + Math.random() * 58, growth: 1.5 + Math.random() * 1.5,
+            life: 1.0, decay: 0.0035 + Math.random() * 0.004,
+            r: sr, g: sg, b: sb, curl: (Math.random() - 0.5) * 0.06, type: 'color',
+          });
+        }
+        s.fillColor = [sr, sg, sb];
+        const startFill = performance.now();
+        const rampFill = (now: number) => {
+          const k = Math.min(1, (now - startFill) / 700);
+          s.fillOpacity = Math.max(s.fillOpacity, 0.55 * k);
+          if (k < 1) requestAnimationFrame(rampFill);
+        };
+        requestAnimationFrame(rampFill);
+
+      } else if (oracle.step === 1) {
+        // Step 1 (words): burst of varied-font word particles
+        const words = oracle.response.fragment.split(/\s+/).filter(Boolean);
+        const fontSizes = [11, 14, 17, 20, 24];
+        const fontFamilies = ['ui-monospace, monospace', 'Georgia, serif', 'Palatino, serif'];
+        for (let i = 0; i < words.length * 5; i++) {
+          const ang = Math.random() * Math.PI * 2;
+          const sp = 2.5 + Math.random() * 5;
+          const [wr, wg, wb] = wordColor(stepColor, i);
+          s.particles.push({
+            x: bx + (Math.random() - 0.5) * br * 0.7,
+            y: by + (Math.random() - 0.5) * br * 0.7,
+            vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 0.4,
+            size: 0, growth: 0, life: 1.0,
+            decay: 0.0035 + Math.random() * 0.005,
+            r: wr, g: wg, b: wb,
+            curl: (Math.random() - 0.5) * 0.28,
+            type: 'word',
+            text: words[i % words.length],
+            font: `${fontSizes[Math.floor(Math.random() * fontSizes.length)]}px ${fontFamilies[Math.floor(Math.random() * fontFamilies.length)]}`,
+          });
+        }
+        s.fillColor = [sr, sg, sb];
+        const startFill = performance.now();
+        const rampFill = (now: number) => {
+          const k = Math.min(1, (now - startFill) / 700);
+          s.fillOpacity = Math.max(s.fillOpacity, 0.38 * k);
+          if (k < 1) requestAnimationFrame(rampFill);
+        };
+        requestAnimationFrame(rampFill);
+
+      } else if (oracle.step === 2) {
+        // Step 2 (shape): smoke particles scatter from ball
+        const burst = Math.floor(80 * cfg.smokeDensity);
+        for (let i = 0; i < burst; i++) {
+          const ang = Math.random() * Math.PI * 2;
+          const sp = 1.5 + Math.random() * 4.5;
+          s.particles.push({
+            x: bx + (Math.random() - 0.5) * br * 0.8,
+            y: by + (Math.random() - 0.5) * br * 0.8,
+            vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 0.4,
+            size: 6 + Math.random() * 20, growth: 0.7, life: 1.0,
+            decay: 0.007 + Math.random() * 0.007,
+            r: sr, g: sg, b: sb, curl: (Math.random() - 0.5) * 0.08, type: 'smoke',
+          });
+        }
+        s.fillColor = [sr, sg, sb];
+        const startFill = performance.now();
+        const rampFill = (now: number) => {
+          const k = Math.min(1, (now - startFill) / 700);
+          s.fillOpacity = Math.max(s.fillOpacity, 0.28 * k);
+          if (k < 1) requestAnimationFrame(rampFill);
+        };
+        requestAnimationFrame(rampFill);
+      }
+
+      setBallOpacity(0);
+      const nextStep = oracle.step + 1;
+
+      if (nextStep > 2) {
+        // All three steps complete — return to idle
+        oracleSeqRef.current = null;
+        setTweak('glowColor', defaultGlowRef.current);
+        const t1 = setTimeout(() => {
+          const gid = tRef.current.generator === 'random' ? null : tRef.current.generator;
+          setCurrentVision(generateVision({ size: 900, generatorId: gid }));
+          setBallOpacity(1);
+        }, 800);
+        const t2 = setTimeout(() => { setPhase('idle'); phaseRef.current = 'idle'; }, 1700);
+        timersRef.current = [t1, t2];
+      } else {
+        // Advance to next oracle step
+        oracle.step = nextStep;
+        const nextColor = oracle.colors[nextStep];
+        setTweak('glowColor', nextColor);
+
+        const t1 = setTimeout(() => {
+          oracle.shapeStartTime = performance.now();
+          const bg = generateStepBackground(nextColor, 900);
+          setCurrentVision({
+            canvas: bg,
+            generator: { id: 'oracle', name: 'Oracle', fn: () => {} },
+            palette: [...oracle.colors],
+            seed: oracle.seed,
+          });
+          setBallOpacity(0.7);
+          setPhase('rendering'); phaseRef.current = 'rendering';
+
+          // Step 1: seed preview words drifting inside the ball
+          if (nextStep === 1) {
+            const el = ballWrapRef.current;
+            let bx2 = window.innerWidth / 2, by2 = window.innerHeight / 2, br2 = 200;
+            if (el) {
+              const rect = el.getBoundingClientRect();
+              bx2 = rect.left + rect.width / 2; by2 = rect.top + rect.height / 2; br2 = rect.width / 2;
+            }
+            emitPreviewWords(oracle.response.fragment, nextColor, stateRef.current.particles, bx2, by2, br2);
+          }
+        }, 900);
+        timersRef.current = [t1];
+      }
+
+      return;
+    }
+
+    // ── Free-play drag (no oracle active) ────────────────────────────────────
+    const palette = currentVision ? currentVision.palette.slice(1) : ['#888', '#aaa'];
+    const colors = palette.map(hexToRgb);
+    s.fillColor = (colors[Math.floor(colors.length / 2)] as [number, number, number]) ?? s.fillColor;
     const burst = Math.floor(120 * cfg.smokeDensity);
     for (let i = 0; i < burst; i++) {
       const ang = Math.random() * Math.PI * 2;
       const sp = 1.5 + Math.random() * 4.5;
       const c = colors[Math.floor(Math.random() * colors.length)];
       s.particles.push({
-        x: s.cx + (Math.random() - 0.5) * 30,
-        y: s.cy + (Math.random() - 0.5) * 30,
+        x: s.cx + (Math.random() - 0.5) * 30, y: s.cy + (Math.random() - 0.5) * 30,
         vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 0.4,
         size: 28 + Math.random() * 38, growth: 1.4 + Math.random() * 1.5,
         life: 1.0, decay: 0.0045 + Math.random() * 0.006,
         r: c[0], g: c[1], b: c[2], curl: (Math.random() - 0.5) * 0.06,
       });
     }
-    let start = performance.now();
-    function rampFill(now: number) {
-      const k = Math.min(1, (now - start) / 700);
+    const startFill = performance.now();
+    const rampFill = (now: number) => {
+      const k = Math.min(1, (now - startFill) / 700);
       s.fillOpacity = Math.max(s.fillOpacity, 0.55 * k);
       if (k < 1 && stateRef.current.particles.length) requestAnimationFrame(rampFill);
-    }
+    };
     requestAnimationFrame(rampFill);
     setBallOpacity(0);
-    setTimeout(() => {
+    const t1 = setTimeout(() => {
       const gid = tRef.current.generator === 'random' ? null : tRef.current.generator;
       setCurrentVision(generateVision({ size: 900, generatorId: gid }));
       setBallOpacity(1);
     }, 1000);
-    setTimeout(() => { setPhase('idle'); phaseRef.current = 'idle'; }, 2200);
+    const t2 = setTimeout(() => { setPhase('idle'); phaseRef.current = 'idle'; }, 2200);
+    timersRef.current = [t1, t2];
   }, [currentVision]);
 
-  // Keep ref in sync so stale closures in event handlers always call the latest version
   useEffect(() => { releaseSmokeRef.current = releaseSmoke; }, [releaseSmoke]);
 
-  // ── Collapse oracle early (click during response) ─────────────────────────
+  // ── Collapse oracle early ─────────────────────────────────────────────────
   const collapseOracle = useCallback(() => {
     timersRef.current.forEach(clearTimeout);
     timersRef.current = [];
+    oracleSeqRef.current = null;
     const s = stateRef.current;
     for (const p of s.particles) p.decay = 0.08;
     setTweak('glowColor', defaultGlowRef.current);
     setBallOpacity(0);
-    oracleRef.current = null;
-    setTimeout(() => {
+    const t1 = setTimeout(() => {
       const gid = tRef.current.generator === 'random' ? null : tRef.current.generator;
       setCurrentVision(generateVision({ size: 900, generatorId: gid }));
       setBallOpacity(1);
     }, 600);
-    setTimeout(() => { setPhase('idle'); phaseRef.current = 'idle'; }, 1400);
+    const t2 = setTimeout(() => { setPhase('idle'); phaseRef.current = 'idle'; }, 1400);
+    timersRef.current = [t1, t2];
   }, []);
 
   // ── Oracle question handling ───────────────────────────────────────────────
@@ -306,47 +479,31 @@ export default function OracleApp() {
 
     try {
       const response = await queryOracle(question);
-      const colors = deriveColors(response);
+      const [c0, c1, c2] = deriveThreeColors(response);
       const shapeType = selectShape(response);
       const patternType = selectPattern(response);
       const seed = (Math.random() * 1e9) | 0;
 
-      // Update glow to match Oracle's primary color
-      setTweak('glowColor', colors.primary);
+      setTweak('glowColor', c0);
 
-      // Oracle background replaces current vision
-      const oracleBg = generateOracleBackground(colors, 900);
+      const bg = generateStepBackground(c0, 900);
       setCurrentVision({
-        canvas: oracleBg,
+        canvas: bg,
         generator: { id: 'oracle', name: 'Oracle', fn: () => {} },
-        palette: [colors.primary, colors.secondary],
+        palette: [c0, c1, c2],
         seed,
       });
 
-      oracleRef.current = {
-        response, colors, shapeType, patternType,
+      oracleSeqRef.current = {
+        step: 0,
+        colors: [c0, c1, c2],
+        response, shapeType, patternType, seed,
         shapeStartTime: performance.now(),
-        wordParticlesEmitted: false,
-        dissolveParticlesEmitted: false,
-        seed,
       };
 
-      setBallOpacity(0.6);
+      setBallOpacity(0.7);
       setPhase('rendering'); phaseRef.current = 'rendering';
-
-      const t1 = setTimeout(() => { setPhase('dissolving'); phaseRef.current = 'dissolving'; }, 2000);
-      const t2 = setTimeout(() => { setPhase('settling'); phaseRef.current = 'settling'; }, 4400);
-      const t3 = setTimeout(() => {
-        oracleRef.current = null;
-        setTweak('glowColor', defaultGlowRef.current);
-        setBallOpacity(0);
-        const gid = tRef.current.generator === 'random' ? null : tRef.current.generator;
-        setCurrentVision(generateVision({ size: 900, generatorId: gid }));
-        setBallOpacity(1);
-        setTimeout(() => { setPhase('idle'); phaseRef.current = 'idle'; }, 400);
-      }, 6600);
-
-      timersRef.current = [t1, t2, t3];
+      // No auto-advance timers — user interaction drives each step
     } catch {
       handleOracleError();
     }
@@ -355,7 +512,6 @@ export default function OracleApp() {
   const handleOracleError = useCallback(() => {
     setBallOpacity(0.3);
     const s = stateRef.current;
-    // Sparse gray interference
     for (let i = 0; i < 18; i++) {
       const ang = Math.random() * Math.PI * 2;
       s.particles.push({
@@ -366,7 +522,6 @@ export default function OracleApp() {
         r: 95, g: 95, b: 110, curl: (Math.random() - 0.5) * 0.1,
       });
     }
-    // Error fragment
     s.particles.push({
       x: window.innerWidth / 2 - 90, y: window.innerHeight / 2 - 30,
       vx: 0, vy: -0.25, size: 0, growth: 0, life: 1.0, decay: 0.003,
@@ -375,8 +530,7 @@ export default function OracleApp() {
       font: '12px ui-monospace, monospace',
     });
     const t1 = setTimeout(() => {
-      setBallOpacity(1);
-      setPhase('idle'); phaseRef.current = 'idle';
+      setBallOpacity(1); setPhase('idle'); phaseRef.current = 'idle';
     }, 4500);
     timersRef.current = [t1];
   }, []);
@@ -393,11 +547,9 @@ export default function OracleApp() {
       const dt = Math.min(48, now - lastT); lastT = now;
       const currPhase = phaseRef.current;
 
-      // smooth cursor
       s.cx += (s.mx - s.cx) * 0.42;
       s.cy += (s.my - s.cy) * 0.42;
 
-      // ball bounds
       const ballEl = ballWrapRef.current;
       let bx = window.innerWidth / 2, by = window.innerHeight / 2, br = 200;
       if (ballEl) {
@@ -407,18 +559,17 @@ export default function OracleApp() {
         br = rect.width / 2;
       }
 
-      // cursor
       if (cursorRef.current) {
         cursorRef.current.style.setProperty('--cx', s.cx + 'px');
         cursorRef.current.style.setProperty('--cy', s.cy + 'px');
-        cursorRef.current.classList.toggle('over-ball', s.overBall && currPhase === 'idle');
+        cursorRef.current.classList.toggle('over-ball', s.overBall && (currPhase === 'idle' || currPhase === 'rendering'));
         cursorRef.current.classList.toggle('grabbing', currPhase === 'dragging');
         cursorRef.current.classList.toggle('over-input', s.overInput);
       }
 
-      // ── smoke emission (drag) ───────────────────────────────────────────
-      if (currPhase === 'dragging' && currentVision) {
-        const palette = currentVision.palette.slice(1);
+      // ── Emission during drag ────────────────────────────────────────────
+      if (currPhase === 'dragging') {
+        const oracle = oracleSeqRef.current;
         const dx = s.cx - bx, dy = s.cy - by;
         const distFromBall = Math.hypot(dx, dy);
         const norm = Math.max(distFromBall, 1);
@@ -426,89 +577,103 @@ export default function OracleApp() {
         const oy = by + (dy / norm) * br * 0.85;
         const beyond = Math.max(0, distFromBall - br);
         emitAccum += (1.5 + beyond * 0.03) * cfg.smokeDensity * (dt / 16);
-        while (emitAccum > 1) {
-          emitAccum -= 1;
-          const ang = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.55;
-          const targetDist = Math.max(beyond, 30) * cfg.trailLength;
-          const sp = 1.5 + Math.random() * 2.8 + targetDist * 0.015;
-          const c = hexToRgb(palette[Math.floor(Math.random() * palette.length)]);
-          s.particles.push({
-            x: ox + (Math.random() - 0.5) * br * 0.25,
-            y: oy + (Math.random() - 0.5) * br * 0.25,
-            vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
-            size: 10 + Math.random() * 16, growth: 0.4 + Math.random() * 0.8,
-            life: 1.0, decay: 0.011 + Math.random() * 0.012,
-            r: c[0], g: c[1], b: c[2], curl: (Math.random() - 0.5) * 0.08,
-          });
+
+        if (oracle) {
+          // Oracle step-specific emission
+          const stepColor = oracle.colors[oracle.step];
+          const [sr, sg, sb] = hexToRgb(stepColor);
+
+          while (emitAccum > 1) {
+            emitAccum -= 1;
+            const ang = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.55;
+            const sp = 1.5 + Math.random() * 2.8 + beyond * 0.015;
+
+            if (oracle.step === 0) {
+              // Color: large vivid blobs toward cursor
+              s.particles.push({
+                x: ox + (Math.random() - 0.5) * br * 0.22,
+                y: oy + (Math.random() - 0.5) * br * 0.22,
+                vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+                size: 18 + Math.random() * 30, growth: 1.1 + Math.random() * 0.8,
+                life: 1.0, decay: 0.01 + Math.random() * 0.01,
+                r: sr, g: sg, b: sb, curl: (Math.random() - 0.5) * 0.06, type: 'color',
+              });
+            } else if (oracle.step === 1) {
+              // Words: varied font sizes and families stream toward cursor
+              const words = oracle.response.fragment.split(/\s+/).filter(Boolean);
+              const fontSize = FONT_SIZES[Math.floor(Math.random() * FONT_SIZES.length)];
+              const fontFamily = FONT_FAMILIES[Math.floor(Math.random() * FONT_FAMILIES.length)];
+              const [wr, wg, wb] = wordColor(stepColor, Math.floor(Math.random() * words.length));
+              s.particles.push({
+                x: ox, y: oy,
+                vx: Math.cos(ang) * sp * 0.85, vy: Math.sin(ang) * sp * 0.85 - 0.25,
+                size: 0, growth: 0, life: 1.0,
+                decay: 0.008 + Math.random() * 0.008,
+                r: wr, g: wg, b: wb,
+                curl: (Math.random() - 0.5) * 0.32,
+                type: 'word',
+                text: words[Math.floor(Math.random() * words.length)],
+                font: `${fontSize}px ${fontFamily}`,
+              });
+            } else {
+              // Shape: smoke in shape color
+              s.particles.push({
+                x: ox + (Math.random() - 0.5) * br * 0.2,
+                y: oy + (Math.random() - 0.5) * br * 0.2,
+                vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+                size: 8 + Math.random() * 16, growth: 0.6 + Math.random() * 0.6,
+                life: 1.0, decay: 0.01 + Math.random() * 0.01,
+                r: sr, g: sg, b: sb, curl: (Math.random() - 0.5) * 0.08,
+              });
+            }
+          }
+
+          const targetOpacity = Math.max(0.22, 1 - beyond / (br * 1.5));
+          if (currentVision?.canvas) currentVision.canvas.style.opacity = String(targetOpacity);
+
+        } else if (currentVision) {
+          // Free-play drag: original smoke emission from vision palette
+          const palette = currentVision.palette.slice(1);
+          while (emitAccum > 1) {
+            emitAccum -= 1;
+            const ang = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.55;
+            const targetDist = Math.max(beyond, 30) * cfg.trailLength;
+            const sp = 1.5 + Math.random() * 2.8 + targetDist * 0.015;
+            const c = hexToRgb(palette[Math.floor(Math.random() * palette.length)]);
+            s.particles.push({
+              x: ox + (Math.random() - 0.5) * br * 0.25,
+              y: oy + (Math.random() - 0.5) * br * 0.25,
+              vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+              size: 10 + Math.random() * 16, growth: 0.4 + Math.random() * 0.8,
+              life: 1.0, decay: 0.011 + Math.random() * 0.012,
+              r: c[0], g: c[1], b: c[2], curl: (Math.random() - 0.5) * 0.08,
+            });
+          }
+          const targetOpacity = Math.max(0.25, 1 - beyond / (br * 1.5));
+          if (currentVision.canvas) currentVision.canvas.style.opacity = String(targetOpacity);
         }
-        const targetOpacity = Math.max(0.25, 1 - beyond / (br * 1.5));
-        const vc = currentVision.canvas;
-        if (vc) vc.style.opacity = String(targetOpacity);
+      } else {
+        emitAccum = 0;
       }
 
-      // ── Oracle shape canvas rendering ───────────────────────────────────
-      const oracle = oracleRef.current;
+      // ── Oracle shape canvas (step 2 only) ──────────────────────────────
+      const oracle = oracleSeqRef.current;
       const sc = shapeCanvasRef.current;
       if (sc) {
         const sctx = sc.getContext('2d');
         if (sctx) {
-          if (oracle && (currPhase === 'rendering' || currPhase === 'dissolving')) {
+          if (oracle && oracle.step === 2 && currPhase === 'rendering') {
             sctx.clearRect(0, 0, sc.width, sc.height);
             const shapeTime = (now - oracle.shapeStartTime) / 1000;
             const scCx = sc.width / 2, scCy = sc.height / 2;
             const scR = sc.width * 0.4;
-
-            // Draw shape
-            const result = drawShape(sctx, scCx, scCy, scR, oracle.colors, oracle.response, shapeTime, oracle.shapeType);
-
-            // Pattern overlay at low opacity
+            // Shape and pattern both use step 2 color
+            const shapeColors = { primary: oracle.colors[2], secondary: oracle.colors[2] };
+            drawShape(sctx, scCx, scCy, scR, shapeColors, oracle.response, shapeTime, oracle.shapeType);
             sctx.save();
-            sctx.globalAlpha = 0.14;
-            drawPattern(sctx, sc.width, oracle.colors, oracle.response, oracle.seed, oracle.patternType);
+            sctx.globalAlpha = 0.12;
+            drawPattern(sctx, sc.width, shapeColors, oracle.response, oracle.seed, oracle.patternType);
             sctx.restore();
-
-            // Emit word particles once, shortly after rendering starts
-            if (!oracle.wordParticlesEmitted && shapeTime > 0.15) {
-              oracle.wordParticlesEmitted = true;
-              emitWordParticles(oracle.response.fragment, oracle.colors, s.particles, bx, by, br);
-            }
-
-            // Emit dissolve particles when dissolving phase starts
-            if (currPhase === 'dissolving' && !oracle.dissolveParticlesEmitted) {
-              oracle.dissolveParticlesEmitted = true;
-              const sample = result.vertices.slice(0, 50);
-              const [r2, g2, b2] = hexToRgb(oracle.colors.secondary);
-              const [rp, gp, bp] = hexToRgb(oracle.colors.primary);
-              for (const v of sample) {
-                // Map from shape canvas coords to screen coords
-                const sx = bx - br + (v.x / sc.width) * (br * 2);
-                const sy = by - br + (v.y / sc.height) * (br * 2);
-                const ang = Math.random() * Math.PI * 2;
-                s.particles.push({
-                  x: sx, y: sy,
-                  vx: Math.cos(ang) * (1.2 + Math.random() * 2.5),
-                  vy: Math.sin(ang) * (1.2 + Math.random() * 2.5) - 0.5,
-                  size: 5 + Math.random() * 12, growth: 0.5 + Math.random() * 0.9,
-                  life: 1.0, decay: 0.006 + Math.random() * 0.005,
-                  r: r2, g: g2, b: b2, curl: (Math.random() - 0.5) * 0.08,
-                  type: 'smoke',
-                });
-              }
-              // Large primary color atmosphere blobs
-              for (let i = 0; i < 20; i++) {
-                const ang = Math.random() * Math.PI * 2;
-                s.particles.push({
-                  x: bx + (Math.random() - 0.5) * br * 0.8,
-                  y: by + (Math.random() - 0.5) * br * 0.8,
-                  vx: Math.cos(ang) * (0.8 + Math.random() * 1.5),
-                  vy: Math.sin(ang) * 0.8 - 0.3,
-                  size: 35 + Math.random() * 45, growth: 0.8,
-                  life: 1.0, decay: 0.004 + Math.random() * 0.003,
-                  r: rp, g: gp, b: bp, curl: (Math.random() - 0.5) * 0.05,
-                  type: 'color',
-                });
-              }
-            }
           } else {
             sctx.clearRect(0, 0, sc.width, sc.height);
           }
@@ -545,7 +710,6 @@ export default function OracleApp() {
         }
         if (currPhase !== 'dragging') s.fillOpacity *= 0.985;
 
-        // Screen-blended smoke + color particles
         ctx.globalCompositeOperation = 'screen';
         for (const p of ps) {
           if (p.type === 'word') continue;
@@ -561,7 +725,7 @@ export default function OracleApp() {
         }
         ctx.globalCompositeOperation = 'source-over';
 
-        // Word particles
+        // Word particles — varied font/size/hue
         for (const p of ps) {
           if (p.type !== 'word') continue;
           const a = Math.max(0, p.life);
@@ -589,7 +753,6 @@ export default function OracleApp() {
 
   return (
     <div className="stage">
-      {/* fisheye SVG filter */}
       <svg className="filter-svg" aria-hidden="true">
         <defs>
           <filter id="fisheye" x="0%" y="0%" width="100%" height="100%">
@@ -690,41 +853,41 @@ export default function OracleApp() {
   );
 }
 
-// ── Word particle emitter ─────────────────────────────────────────────────────
-function emitWordParticles(
-  fragment: string,
-  colors: ColorPair,
-  particles: Particle[],
+// ── Constants ─────────────────────────────────────────────────────────────────
+const FONT_SIZES = [11, 13, 14, 16, 18, 20, 22];
+const FONT_FAMILIES = ['ui-monospace, monospace', 'Georgia, serif', 'Palatino, serif', 'Garamond, serif'];
+
+// Slight hue shift per word index for variety within a step
+function wordColor(baseHex: string, wordIdx: number): [number, number, number] {
+  const [h, s, l] = hexToHsl(baseHex);
+  const shifted = hslToHex(h + ((wordIdx * 23) % 50) - 25, clamp(s, 30, 98), clamp(l, 35, 98));
+  return hexToRgb(shifted);
+}
+
+// Slow-drifting preview words seeded inside the ball at step 1 start
+function emitPreviewWords(
+  fragment: string, color: string, particles: Particle[],
   bx: number, by: number, br: number
 ) {
   const words = fragment.split(/\s+/).filter(Boolean);
-  const [r, g, b] = hexToRgb(colors.secondary);
-  const fonts = [
-    '13px ui-monospace, monospace',
-    '12px Georgia, serif',
-    '14px ui-monospace, monospace',
-    '11px Georgia, serif',
-    '13px Georgia, serif',
-  ];
-
   words.forEach((word, i) => {
-    const ang = (i / words.length) * Math.PI * 2 + Math.random() * 0.6;
-    const sp = 2.2 + Math.random() * 2.8;
-    // Start from slightly inside ball center
-    const ox = bx + (Math.random() - 0.5) * br * 0.3;
-    const oy = by + (Math.random() - 0.5) * br * 0.3;
+    const angle = (i / words.length) * Math.PI * 2 + (Math.random() - 0.5) * 1.4;
+    const dist = (0.08 + Math.random() * 0.32) * br;
+    const [r, g, b] = wordColor(color, i);
+    const fontSize = FONT_SIZES[Math.floor(Math.random() * FONT_SIZES.length)];
+    const fontFamily = FONT_FAMILIES[Math.floor(Math.random() * FONT_FAMILIES.length)];
     particles.push({
-      x: ox, y: oy,
-      vx: Math.cos(ang) * sp,
-      vy: Math.sin(ang) * sp - 0.4,
+      x: bx + Math.cos(angle) * dist,
+      y: by + Math.sin(angle) * dist,
+      vx: (Math.random() - 0.5) * 0.35,
+      vy: -0.18 - Math.random() * 0.22,
       size: 0, growth: 0,
       life: 1.0,
-      decay: 0.0035 + Math.random() * 0.003,
+      decay: 0.0012 + Math.random() * 0.0007,
       r, g, b,
-      curl: (Math.random() - 0.5) * 0.28,
-      type: 'word',
-      text: word,
-      font: fonts[i % fonts.length],
+      curl: (Math.random() - 0.5) * 0.05,
+      type: 'word', text: word,
+      font: `${fontSize}px ${fontFamily}`,
     });
   });
 }

@@ -11,7 +11,7 @@ export type Archetypal =
   | 'the_threshold' | 'the_wound' | 'the_mirror' | 'the_descent' | 'the_return'
   | 'the_tower' | 'the_garden' | 'the_fire' | 'the_tide' | 'the_mask' | 'the_void';
 
-export type ShapeType = 'fibonacci' | 'lissajous' | 'rose' | 'hypocycloid' | 'interference' | 'epitrochoid' | 'attractor';
+export type ShapeType = 'fibonacci' | 'lissajous' | 'rose' | 'hypocycloid' | 'interference' | 'epitrochoid' | 'attractor' | 'phyllotaxis' | 'superformula' | 'modular_circle';
 
 export type PatternType = 'voronoi' | 'flow' | 'fibonacci_tiling' | 'interference_rings' | 'fractal_dust';
 
