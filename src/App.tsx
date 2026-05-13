@@ -88,6 +88,10 @@ export default function OracleApp() {
   const pingPongRef = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
   const pingPongTrailRef = useRef<HTMLCanvasElement | null>(null);
   const shapeVerticesRef = useRef<Array<{ x: number; y: number }>>([]);
+  const cometTrailRef = useRef<Array<{ x: number; y: number; t: number }>>([]);
+  const cursorTrainHistRef = useRef<Array<{ x: number; y: number }>>([]);
+  const shapeStampRef = useRef<HTMLCanvasElement | null>(null);
+  const shapeTrailHistRef = useRef<Array<{ x: number; y: number; t: number }>>([]);
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
@@ -266,20 +270,23 @@ export default function OracleApp() {
       const [sr, sg, sb] = hexToRgb(stepColor);
 
       if (oracle.step === 0) {
-        // Color/patronus: burst of large vivid blobs
+        // Fire comet burst from comet's last position
+        const cometPos = pingPongRef.current || { x: bx, y: by };
         const burst = Math.floor(110 * cfg.smokeDensity);
         for (let i = 0; i < burst; i++) {
           const ang = Math.random() * Math.PI * 2;
           const sp = 2.5 + Math.random() * 5.5;
+          const fRoll = Math.random();
+          const fg3 = fRoll < 0.55 ? Math.floor(Math.random() * 110) : Math.floor(80 + Math.random() * 150);
           s.particles.push({
-            x: bx + (Math.random() - 0.5) * 55, y: by + (Math.random() - 0.5) * 55,
+            x: cometPos.x + (Math.random() - 0.5) * 60, y: cometPos.y + (Math.random() - 0.5) * 60,
             vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 0.5,
-            size: 35 + Math.random() * 60, growth: 1.6 + Math.random() * 1.5,
+            size: 30 + Math.random() * 55, growth: 1.5 + Math.random() * 1.4,
             life: 1.0, decay: 0.0032 + Math.random() * 0.004,
-            r: sr, g: sg, b: sb, curl: (Math.random() - 0.5) * 0.06, type: 'color',
+            r: 255, g: fg3, b: 0, curl: (Math.random() - 0.5) * 0.08, type: 'color',
           });
         }
-        s.fillColor = [sr, sg, sb];
+        s.fillColor = [255, 90, 0];
         const sf = performance.now();
         const rf = (n: number) => { const k = Math.min(1, (n-sf)/700); s.fillOpacity = Math.max(s.fillOpacity, 0.55*k); if (k<1) requestAnimationFrame(rf); };
         requestAnimationFrame(rf);
@@ -342,6 +349,10 @@ export default function OracleApp() {
       pingPongRef.current = null;
       pingPongTrailRef.current = null;
       shapeVerticesRef.current = [];
+      cometTrailRef.current = [];
+      cursorTrainHistRef.current = [];
+      shapeStampRef.current = null;
+      shapeTrailHistRef.current = [];
       const nextStep = oracle.step + 1;
 
       if (nextStep > 2) {
@@ -422,6 +433,10 @@ export default function OracleApp() {
     pingPongRef.current = null;
     pingPongTrailRef.current = null;
     shapeVerticesRef.current = [];
+    cometTrailRef.current = [];
+    cursorTrainHistRef.current = [];
+    shapeStampRef.current = null;
+    shapeTrailHistRef.current = [];
     const s = stateRef.current;
     for (const p of s.particles) p.decay = 0.08;
     setTweak('glowColor', defaultGlowRef.current);
@@ -503,6 +518,7 @@ export default function OracleApp() {
       const cfg = tRef.current;
       const dt = Math.min(48, now - lastT); lastT = now;
       const currPhase = phaseRef.current;
+      const oracle = oracleSeqRef.current;
 
       s.cx += (s.mx - s.cx) * 0.42;
       s.cy += (s.my - s.cy) * 0.42;
@@ -522,9 +538,58 @@ export default function OracleApp() {
         cursorRef.current.classList.toggle('over-input', s.overInput);
       }
 
+      // ── Step 0: Comet physics (screen coords) ────────────────────────────────
+      if (oracle && oracle.step === 0) {
+        if (!pingPongRef.current) {
+          const ang0 = Math.random() * Math.PI * 2;
+          const spd0 = 4.5 + Math.random() * 2.5;
+          pingPongRef.current = {
+            x: bx + (Math.random() - 0.5) * br * 0.5,
+            y: by + (Math.random() - 0.5) * br * 0.5,
+            vx: Math.cos(ang0) * spd0, vy: Math.sin(ang0) * spd0,
+          };
+        }
+        const pp = pingPongRef.current;
+        if (currPhase === 'rendering') {
+          pp.vx += (Math.random() - 0.5) * 0.7;
+          pp.vy += (Math.random() - 0.5) * 0.7 - 0.07;
+          pp.x += pp.vx; pp.y += pp.vy;
+          const ppDist = Math.hypot(pp.x - bx, pp.y - by);
+          const ppLimit = br * 0.82;
+          if (ppDist > ppLimit) {
+            const nx = (pp.x-bx)/ppDist, ny = (pp.y-by)/ppDist;
+            const dot = pp.vx*nx + pp.vy*ny;
+            if (dot > 0) { pp.vx -= 2*dot*nx*0.87; pp.vy -= 2*dot*ny*0.87; }
+            pp.x = bx + nx*(ppLimit-1); pp.y = by + ny*(ppLimit-1);
+          }
+          const ppSpd = Math.hypot(pp.vx, pp.vy);
+          if (ppSpd < 4.0) { pp.vx *= 4.0/ppSpd; pp.vy *= 4.0/ppSpd; }
+          if (ppSpd > 9.0) { pp.vx *= 9.0/ppSpd; pp.vy *= 9.0/ppSpd; }
+        } else if (currPhase === 'dragging') {
+          pp.x += (s.cx - pp.x) * 0.22;
+          pp.y += (s.cy - pp.y) * 0.22;
+        }
+        const cTrail = cometTrailRef.current;
+        cTrail.push({ x: pp.x, y: pp.y, t: now });
+        while (cTrail.length > 0 && now - cTrail[0].t > 900) cTrail.shift();
+        while (cTrail.length > 70) cTrail.shift();
+      }
+
+      // ── Step 1: Cursor history for word snake ───────────────────────────────
+      if (oracle && oracle.step === 1 && currPhase === 'dragging') {
+        cursorTrainHistRef.current.push({ x: s.cx, y: s.cy });
+        if (cursorTrainHistRef.current.length > 400) cursorTrainHistRef.current.shift();
+      }
+
+      // ── Step 2: Cursor history for shape stamp trail ────────────────────────
+      if (oracle && oracle.step === 2 && currPhase === 'dragging') {
+        shapeTrailHistRef.current.push({ x: s.cx, y: s.cy, t: now });
+        while (shapeTrailHistRef.current.length > 0 && now - shapeTrailHistRef.current[0].t > 1400)
+          shapeTrailHistRef.current.shift();
+      }
+
       // ── Drag emission ─────────────────────────────────────────────────────
       if (currPhase === 'dragging') {
-        const oracle = oracleSeqRef.current;
         const dx = s.cx - bx, dy = s.cy - by;
         const distFromBall = Math.hypot(dx, dy);
         const norm = Math.max(distFromBall, 1);
@@ -542,24 +607,28 @@ export default function OracleApp() {
             const ang = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.55;
             const sp = 1.5 + Math.random() * 2.8 + beyond * 0.015;
 
-            if (oracle.step === 0) {
-              // Color/patronus drag: large color blobs
+            if (oracle.step === 0 && pingPongRef.current) {
+              // Fire comet drag: particles emit from comet position
+              const pp = pingPongRef.current;
+              const fRoll = Math.random();
+              const fg2 = fRoll < 0.55 ? Math.floor(Math.random() * 110) : Math.floor(70 + Math.random() * 150);
               s.particles.push({
-                x: ox + (Math.random()-0.5)*br*0.22, y: oy + (Math.random()-0.5)*br*0.22,
-                vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp,
-                size: 20 + Math.random()*32, growth: 1.2 + Math.random()*0.8,
-                life: 1.0, decay: 0.009 + Math.random()*0.01,
-                r: sr, g: sg, b: sb, curl: (Math.random()-0.5)*0.06, type: 'color',
+                x: pp.x + (Math.random()-0.5)*14, y: pp.y + (Math.random()-0.5)*14,
+                vx: Math.cos(ang)*sp*0.75 + (Math.random()-0.5)*2,
+                vy: Math.sin(ang)*sp*0.75 - 0.7 + (Math.random()-0.5)*2,
+                size: 12 + Math.random()*24, growth: 0.9 + Math.random()*1.0,
+                life: 1.0, decay: 0.010 + Math.random()*0.012,
+                r: 255, g: fg2, b: 0, curl: (Math.random()-0.5)*0.14, type: 'color',
               });
             } else if (oracle.step === 1) {
-              // Words drag: mixed-language word particles toward cursor
+              // Words drag: emit from cursor position (snake train handled separately)
               const { text, font: wFont } = pickWordParticle(oracle.response.fragment);
               const [wr, wg, wb] = wordColor(stepColor, Math.floor(Math.random() * 7));
               s.particles.push({
-                x: ox, y: oy,
-                vx: Math.cos(ang)*sp*0.85, vy: Math.sin(ang)*sp*0.85 - 0.25,
-                size: 0, growth: 0, life: 1.0, decay: 0.007 + Math.random()*0.008,
-                r: wr, g: wg, b: wb, curl: (Math.random()-0.5)*0.32,
+                x: s.cx + (Math.random()-0.5)*22, y: s.cy + (Math.random()-0.5)*22,
+                vx: Math.cos(ang)*sp*0.55, vy: Math.sin(ang)*sp*0.55 - 0.3,
+                size: 0, growth: 0, life: 0.9, decay: 0.008 + Math.random()*0.008,
+                r: wr, g: wg, b: wb, curl: (Math.random()-0.5)*0.25,
                 type: 'word', text, font: wFont,
               });
             } else {
@@ -612,7 +681,6 @@ export default function OracleApp() {
       }
 
       // ── Shape canvas ─────────────────────────────────────────────────────
-      const oracle = oracleSeqRef.current;
       const sc = shapeCanvasRef.current;
       if (sc) {
         const sctx = sc.getContext('2d');
@@ -621,58 +689,43 @@ export default function OracleApp() {
           const scCx = sc.width/2, scCy = sc.height/2;
 
           if (oracle && oracle.step === 0 && currPhase === 'rendering') {
-            // Ping-pong smoke ball bouncing inside the globe, filling it with trailing glow
-            const [sr0, sg0, sb0] = hexToRgb(oracle.colors[0]);
-            // Init/resize persistent trail canvas
-            if (!pingPongTrailRef.current ||
-                pingPongTrailRef.current.width !== sc.width ||
-                pingPongTrailRef.current.height !== sc.height) {
-              const tc = document.createElement('canvas');
-              tc.width = sc.width; tc.height = sc.height;
-              pingPongTrailRef.current = tc;
-              pingPongRef.current = null;
+            // Fire comet trail inside the ball — drawn from screen-coord history
+            const cTrail = cometTrailRef.current;
+            if (cTrail.length > 1) {
+              for (let i = 0; i < cTrail.length; i++) {
+                const tp = cTrail[i];
+                const frac = i / (cTrail.length - 1); // 0=tail, 1=head
+                const cx = scCx + (tp.x - bx);
+                const cy = scCy + (tp.y - by);
+                let fr: number, fg: number, fb: number;
+                if (frac > 0.75) {
+                  const sub = (frac - 0.75) / 0.25;
+                  fr = 255; fg = Math.floor(180 + sub * 75); fb = Math.floor(sub * 200);
+                } else if (frac > 0.4) {
+                  const sub = (frac - 0.4) / 0.35;
+                  fr = 255; fg = Math.floor(45 + sub * 135); fb = 0;
+                } else {
+                  fr = Math.floor((frac / 0.4) * 190 + 40); fg = 0; fb = 0;
+                }
+                const sz = Math.max(1.5, frac * 14 + 2);
+                const alpha = frac * 0.8 + 0.08;
+                const grad = sctx.createRadialGradient(cx, cy, 0, cx, cy, sz * 2.2);
+                grad.addColorStop(0, `rgba(${fr},${fg},${fb},${alpha})`);
+                grad.addColorStop(1, `rgba(${fr},${fg},${fb},0)`);
+                sctx.fillStyle = grad;
+                sctx.beginPath(); sctx.arc(cx, cy, sz * 2.2, 0, Math.PI * 2); sctx.fill();
+              }
+              // White-hot head
+              const head = cTrail[cTrail.length - 1];
+              const hx = scCx + (head.x - bx), hy = scCy + (head.y - by);
+              const hg = sctx.createRadialGradient(hx, hy, 0, hx, hy, 14);
+              hg.addColorStop(0, 'rgba(255,255,255,1.0)');
+              hg.addColorStop(0.2, 'rgba(255,240,80,0.95)');
+              hg.addColorStop(0.55, 'rgba(255,110,0,0.65)');
+              hg.addColorStop(1, 'rgba(255,30,0,0)');
+              sctx.fillStyle = hg;
+              sctx.beginPath(); sctx.arc(hx, hy, 14, 0, Math.PI * 2); sctx.fill();
             }
-            if (!pingPongRef.current) {
-              const ang0 = Math.random() * Math.PI * 2;
-              const spd0 = 3.8 + Math.random() * 2.2;
-              pingPongRef.current = {
-                x: scCx + (Math.random() - 0.5) * sc.width * 0.22,
-                y: scCy + (Math.random() - 0.5) * sc.height * 0.22,
-                vx: Math.cos(ang0) * spd0, vy: Math.sin(ang0) * spd0,
-              };
-            }
-            const pp = pingPongRef.current;
-            const tc = pingPongTrailRef.current!;
-            const tctx = tc.getContext('2d')!;
-            const ppLimit = sc.width * 0.40;
-            pp.x += pp.vx; pp.y += pp.vy;
-            const ppDist = Math.hypot(pp.x - scCx, pp.y - scCy);
-            if (ppDist > ppLimit) {
-              const nx = (pp.x - scCx) / ppDist, ny = (pp.y - scCy) / ppDist;
-              const dot = pp.vx * nx + pp.vy * ny;
-              if (dot > 0) { pp.vx -= 2 * dot * nx * 0.96; pp.vy -= 2 * dot * ny * 0.96; }
-              pp.x = scCx + nx * (ppLimit - 1); pp.y = scCy + ny * (ppLimit - 1);
-            }
-            const ppSpd = Math.hypot(pp.vx, pp.vy);
-            if (ppSpd < 3.5) { pp.vx *= 3.5 / ppSpd; pp.vy *= 3.5 / ppSpd; }
-            if (ppSpd > 6.5) { pp.vx *= 6.5 / ppSpd; pp.vy *= 6.5 / ppSpd; }
-            // Very slow fade so trail smoke fills the globe over time
-            tctx.fillStyle = 'rgba(0,0,0,0.010)';
-            tctx.fillRect(0, 0, tc.width, tc.height);
-            const bloom = tctx.createRadialGradient(pp.x, pp.y, 0, pp.x, pp.y, 22);
-            bloom.addColorStop(0, `rgba(${sr0},${sg0},${sb0},0.52)`);
-            bloom.addColorStop(0.5, `rgba(${sr0},${sg0},${sb0},0.18)`);
-            bloom.addColorStop(1, `rgba(${sr0},${sg0},${sb0},0)`);
-            tctx.fillStyle = bloom;
-            tctx.beginPath(); tctx.arc(pp.x, pp.y, 22, 0, Math.PI * 2); tctx.fill();
-            sctx.clearRect(0, 0, sc.width, sc.height);
-            sctx.drawImage(tc, 0, 0);
-            const ballGrad = sctx.createRadialGradient(pp.x, pp.y, 0, pp.x, pp.y, 10);
-            ballGrad.addColorStop(0, `rgba(255,255,255,0.9)`);
-            ballGrad.addColorStop(0.3, `rgba(${sr0},${sg0},${sb0},0.95)`);
-            ballGrad.addColorStop(1, `rgba(${sr0},${sg0},${sb0},0)`);
-            sctx.fillStyle = ballGrad;
-            sctx.beginPath(); sctx.arc(pp.x, pp.y, 10, 0, Math.PI * 2); sctx.fill();
 
           } else if (oracle && oracle.step === 2 && currPhase === 'rendering') {
             // Mathematical shape + tracing light
@@ -686,6 +739,16 @@ export default function OracleApp() {
             sctx.globalAlpha = 0.12;
             drawPattern(sctx, sc.width, shapeColors, oracle.response, oracle.seed, oracle.patternType);
             sctx.restore();
+
+            // Pre-render shape stamp for later drag trail
+            if (!shapeStampRef.current) {
+              const stamp = document.createElement('canvas');
+              stamp.width = 100; stamp.height = 100;
+              const stctx = stamp.getContext('2d')!;
+              const stColors = { primary: oracle.colors[2], secondary: oracle.colors[2] };
+              drawShape(stctx, 50, 50, 42, stColors, oracle.response, shapeTime, oracle.shapeType);
+              shapeStampRef.current = stamp;
+            }
 
             // Update trace history and draw comet-tail light
             if (result.traceHead) {
@@ -723,6 +786,23 @@ export default function OracleApp() {
 
       // ── Particle physics ─────────────────────────────────────────────────
       const ps = s.particles;
+
+      // Word snake train: reposition word particles along cursor history during step 1 drag
+      if (oracle && oracle.step === 1 && currPhase === 'dragging') {
+        const hist = cursorTrainHistRef.current;
+        if (hist.length > 0) {
+          const wordParticles = ps.filter(p => p.type === 'word').reverse(); // newest first
+          wordParticles.forEach((p, wIdx) => {
+            const histIdx = Math.max(0, hist.length - 1 - wIdx * 7);
+            const target = hist[histIdx];
+            p.x += (target.x - p.x) * 0.38;
+            p.y += (target.y - p.y) * 0.38;
+            p.vx = 0; p.vy = 0;
+            p.life = Math.min(p.life + 0.02, 0.92); // keep alive while dragging
+          });
+        }
+      }
+
       for (let i = ps.length - 1; i >= 0; i--) {
         const p = ps[i];
 
@@ -740,6 +820,8 @@ export default function OracleApp() {
             if (dot > 0) { p.vx -= 2*dot*nx*0.55; p.vy -= 2*dot*ny*0.55; }
             p.x = bx + nx * (limit - 1); p.y = by + ny * (limit - 1);
           }
+        } else if (p.type === 'word' && oracle?.step === 1 && currPhase === 'dragging') {
+          // Snake train positioning handled above; skip physics here
         } else {
           // Standard smoke/buoyancy physics
           p.vx += (Math.random()-0.5)*0.12 + p.curl*Math.sin(now*0.001+i);
@@ -799,6 +881,63 @@ export default function OracleApp() {
           }
         }
         ctx.globalCompositeOperation = 'source-over';
+
+        // Step 0 drag: fire comet trail on smoke canvas (comet may be outside ball)
+        if (oracle && oracle.step === 0 && currPhase === 'dragging') {
+          const cTrail = cometTrailRef.current;
+          if (cTrail.length > 1) {
+            ctx.save();
+            ctx.globalCompositeOperation = 'screen';
+            for (let i = 0; i < cTrail.length; i++) {
+              const tp = cTrail[i];
+              const frac = i / (cTrail.length - 1);
+              let fr: number, fg: number, fb: number;
+              if (frac > 0.75) {
+                const sub = (frac - 0.75) / 0.25;
+                fr = 255; fg = Math.floor(180 + sub * 75); fb = Math.floor(sub * 200);
+              } else if (frac > 0.4) {
+                const sub = (frac - 0.4) / 0.35;
+                fr = 255; fg = Math.floor(45 + sub * 135); fb = 0;
+              } else {
+                fr = Math.floor((frac / 0.4) * 190 + 40); fg = 0; fb = 0;
+              }
+              const sz = Math.max(1.5, frac * 18 + 2.5);
+              const alpha = frac * 0.75 + 0.06;
+              const grad = ctx.createRadialGradient(tp.x, tp.y, 0, tp.x, tp.y, sz * 2.5);
+              grad.addColorStop(0, `rgba(${fr},${fg},${fb},${alpha})`);
+              grad.addColorStop(1, `rgba(${fr},${fg},${fb},0)`);
+              ctx.fillStyle = grad;
+              ctx.beginPath(); ctx.arc(tp.x, tp.y, sz * 2.5, 0, Math.PI * 2); ctx.fill();
+            }
+            const head = cTrail[cTrail.length - 1];
+            const hg2 = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, 18);
+            hg2.addColorStop(0, 'rgba(255,255,255,1.0)');
+            hg2.addColorStop(0.2, 'rgba(255,240,80,0.95)');
+            hg2.addColorStop(0.55, 'rgba(255,110,0,0.65)');
+            hg2.addColorStop(1, 'rgba(255,30,0,0)');
+            ctx.fillStyle = hg2;
+            ctx.beginPath(); ctx.arc(head.x, head.y, 18, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+          }
+        }
+
+        // Step 2 drag: shape stamp trail on smoke canvas
+        if (oracle && oracle.step === 2 && currPhase === 'dragging' && shapeStampRef.current) {
+          const stamp = shapeStampRef.current;
+          const trail2 = shapeTrailHistRef.current;
+          ctx.save();
+          ctx.globalCompositeOperation = 'screen';
+          for (const tp of trail2) {
+            const age = (now - tp.t) / 1400;
+            const alpha = Math.pow(1 - age, 1.5) * 0.55;
+            const scale = 0.55 + (1 - age) * 0.55; // 0.55–1.1× stamp size
+            const sw = stamp.width * scale, sh = stamp.height * scale;
+            ctx.globalAlpha = alpha;
+            ctx.drawImage(stamp, tp.x - sw / 2, tp.y - sh / 2, sw, sh);
+          }
+          ctx.globalAlpha = 1;
+          ctx.restore();
+        }
 
         // Word particles
         for (const p of ps) {

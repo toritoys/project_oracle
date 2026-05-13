@@ -337,28 +337,49 @@ export function mapLocally(question: string): OracleResponse {
     scores[family] = score;
   }
 
-  // Sort by score
+  // Add per-query noise so scores vary each run
+  for (const key of Object.keys(scores)) {
+    scores[key] = scores[key] * (0.6 + Math.random() * 0.8) + Math.random() * 0.4;
+  }
+
+  // Sort by noisy score, then do a weighted random draw from top 3
   const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-  const primaryFamily = (sorted[0]?.[0] || 'wonder') as AffectFamily;
-  let secondaryFamily = (sorted[1]?.[0] || 'stillness') as AffectFamily;
+  function weightedPickTop3(offset: number): AffectFamily {
+    const top3 = sorted.slice(offset, offset + 3);
+    const total = top3.reduce((s, [, v]) => s + Math.max(0.01, v), 0);
+    let roll = Math.random() * total;
+    for (const [fam, val] of top3) {
+      roll -= Math.max(0.01, val);
+      if (roll <= 0) return fam as AffectFamily;
+    }
+    return top3[0][0] as AffectFamily;
+  }
+  const primaryFamily = weightedPickTop3(0);
+  let secondaryFamily = weightedPickTop3(1);
   if (secondaryFamily === primaryFamily) {
-    secondaryFamily = (sorted[2]?.[0] || 'peace') as AffectFamily;
+    secondaryFamily = (sorted[3]?.[0] || 'peace') as AffectFamily;
   }
 
   const arousal = detectArousal(question);
 
-  // Valence from primary affect with arousal influence
+  // Valence from primary affect with arousal influence and noise
   const baseValence = VALENCE_MAP[primaryFamily] ?? 0;
-  const valence = Math.max(-1, Math.min(1, baseValence + (arousal - 0.5) * 0.15));
+  const valence = Math.max(-1, Math.min(1,
+    baseValence + (arousal - 0.5) * 0.15 + (Math.random() - 0.5) * 0.38
+  ));
 
-  // Certainty inversely related to question length + presence of doubt words
+  // Certainty with noise
   const doubtWords = ['maybe','perhaps','might','could','unsure','know','if','wonder'];
   const hasDoubt = doubtWords.some(w => q.includes(w));
   const certainty = Math.max(0.05, Math.min(0.95,
-    0.6 - (words.length / 40) * 0.3 + (hasDoubt ? -0.15 : 0.1)
+    0.6 - (words.length / 40) * 0.3 + (hasDoubt ? -0.15 : 0.1) + (Math.random() - 0.5) * 0.42
   ));
 
-  const elemental: Elemental = ELEMENTAL_MAP[primaryFamily] || 'void';
+  // 30% chance of a fully random elemental to break predictability
+  const allElementals: Elemental[] = ['fire', 'water', 'earth', 'air', 'void', 'metal', 'light', 'shadow'];
+  const elemental: Elemental = Math.random() < 0.3
+    ? allElementals[Math.floor(Math.random() * allElementals.length)]
+    : (ELEMENTAL_MAP[primaryFamily] || 'void');
   const archetypal: Archetypal = selectArchetypal(elemental, certainty, primaryFamily);
   const fragment = truncateFragment(pickFragment(primaryFamily));
 

@@ -46,7 +46,7 @@ async function queryGroq(question: string, key: string): Promise<OracleResponse>
         { role: 'system', content: ORACLE_SYSTEM_PROMPT },
         { role: 'user', content: question },
       ],
-      temperature: 0.85,
+      temperature: 1.3,
       max_tokens: 300,
     }),
   });
@@ -65,9 +65,10 @@ async function queryGroq(question: string, key: string): Promise<OracleResponse>
   if (!parsed.primary_affect || !parsed.fragment) throw new Error('Invalid schema');
 
   parsed.fragment = truncateFragment(parsed.fragment);
-  parsed.valence = Math.max(-1, Math.min(1, parsed.valence ?? 0));
-  parsed.arousal = Math.max(0, Math.min(1, parsed.arousal ?? 0.5));
-  parsed.certainty = Math.max(0, Math.min(1, parsed.certainty ?? 0.5));
+  // Add jitter so the same question yields varied visuals
+  parsed.valence = Math.max(-1, Math.min(1, (parsed.valence ?? 0) + (Math.random() - 0.5) * 0.28));
+  parsed.arousal = Math.max(0, Math.min(1, (parsed.arousal ?? 0.5) + (Math.random() - 0.5) * 0.22));
+  parsed.certainty = Math.max(0, Math.min(1, (parsed.certainty ?? 0.5) + (Math.random() - 0.5) * 0.32));
 
   return parsed;
 }
