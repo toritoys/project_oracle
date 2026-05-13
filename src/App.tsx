@@ -270,43 +270,41 @@ export default function OracleApp() {
       const [sr, sg, sb] = hexToRgb(stepColor);
 
       if (oracle.step === 0) {
-        // Fire comet burst from comet's last position
+        // Comet burst from comet's last position — oracle colors
         const cometPos = pingPongRef.current || { x: bx, y: by };
+        const [bsr, bsg, bsb] = hexToRgb(oracle.colors[0]);
         const burst = Math.floor(110 * cfg.smokeDensity);
         for (let i = 0; i < burst; i++) {
           const ang = Math.random() * Math.PI * 2;
           const sp = 2.5 + Math.random() * 5.5;
-          const fRoll = Math.random();
-          const fg3 = fRoll < 0.55 ? Math.floor(Math.random() * 110) : Math.floor(80 + Math.random() * 150);
+          const bf = Math.random();
+          const er2 = bf > 0.5 ? Math.min(255, Math.floor(bsr + (255 - bsr) * (bf - 0.5) * 1.6)) : Math.floor(bsr * bf * 2);
+          const eg2 = bf > 0.5 ? Math.min(255, Math.floor(bsg + (255 - bsg) * (bf - 0.5) * 1.6)) : Math.floor(bsg * bf * 2);
+          const eb2 = bf > 0.5 ? Math.min(255, Math.floor(bsb + (255 - bsb) * (bf - 0.5) * 1.6)) : Math.floor(bsb * bf * 2);
           s.particles.push({
             x: cometPos.x + (Math.random() - 0.5) * 60, y: cometPos.y + (Math.random() - 0.5) * 60,
             vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 0.5,
             size: 30 + Math.random() * 55, growth: 1.5 + Math.random() * 1.4,
             life: 1.0, decay: 0.0032 + Math.random() * 0.004,
-            r: 255, g: fg3, b: 0, curl: (Math.random() - 0.5) * 0.08, type: 'color',
+            r: er2, g: eg2, b: eb2, curl: (Math.random() - 0.5) * 0.08, type: 'color',
           });
         }
-        s.fillColor = [255, 90, 0];
+        s.fillColor = [bsr, bsg, bsb];
         const sf = performance.now();
         const rf = (n: number) => { const k = Math.min(1, (n-sf)/700); s.fillOpacity = Math.max(s.fillOpacity, 0.55*k); if (k<1) requestAnimationFrame(rf); };
         requestAnimationFrame(rf);
 
       } else if (oracle.step === 1) {
-        // Words: burst of mixed-language word particles
-        const words = oracle.response.fragment.split(/\s+/).filter(Boolean);
-        const total = words.length * 5;
-        for (let i = 0; i < total; i++) {
-          const ang = Math.random() * Math.PI * 2;
-          const sp = 2.5 + Math.random() * 5;
-          const { text, font: wFont } = pickWordParticle(oracle.response.fragment);
-          const [wr, wg, wb] = wordColor(stepColor, i);
-          s.particles.push({
-            x: bx + (Math.random() - 0.5) * br * 0.7, y: by + (Math.random() - 0.5) * br * 0.7,
-            vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 0.4,
-            size: 0, growth: 0, life: 1.0, decay: 0.0032 + Math.random() * 0.005,
-            r: wr, g: wg, b: wb, curl: (Math.random() - 0.5) * 0.28,
-            type: 'word', text, font: wFont,
-          });
+        // Scatter existing chain words outward to fill the background
+        for (const p of s.particles) {
+          if (p.type !== 'word') continue;
+          const scatterAng = Math.random() * Math.PI * 2;
+          const scatterSp = 2.8 + Math.random() * 5.5;
+          p.vx = Math.cos(scatterAng) * scatterSp + p.vx * 0.3;
+          p.vy = Math.sin(scatterAng) * scatterSp - 0.6 + p.vy * 0.3;
+          p.decay = 0.004 + Math.random() * 0.005;
+          p.life = Math.min(p.life, 1.0);
+          p.curl = (Math.random() - 0.5) * 0.25;
         }
         s.fillColor = [sr, sg, sb];
         const sf = performance.now();
@@ -551,20 +549,21 @@ export default function OracleApp() {
         }
         const pp = pingPongRef.current;
         if (currPhase === 'rendering') {
-          pp.vx += (Math.random() - 0.5) * 0.7;
-          pp.vy += (Math.random() - 0.5) * 0.7 - 0.07;
+          pp.vx += (Math.random() - 0.5) * 0.9;
+          pp.vy += (Math.random() - 0.5) * 0.9 - 0.07;
           pp.x += pp.vx; pp.y += pp.vy;
           const ppDist = Math.hypot(pp.x - bx, pp.y - by);
           const ppLimit = br * 0.82;
           if (ppDist > ppLimit) {
             const nx = (pp.x-bx)/ppDist, ny = (pp.y-by)/ppDist;
             const dot = pp.vx*nx + pp.vy*ny;
-            if (dot > 0) { pp.vx -= 2*dot*nx*0.87; pp.vy -= 2*dot*ny*0.87; }
+            if (dot > 0) { pp.vx -= 2*dot*nx*0.88; pp.vy -= 2*dot*ny*0.88; }
             pp.x = bx + nx*(ppLimit-1); pp.y = by + ny*(ppLimit-1);
+            // Randomize speed on each bounce for chaotic motion
+            const newSpd = 2.5 + Math.random() * 9.0;
+            const curSpd = Math.hypot(pp.vx, pp.vy);
+            if (curSpd > 0.01) { pp.vx *= newSpd/curSpd; pp.vy *= newSpd/curSpd; }
           }
-          const ppSpd = Math.hypot(pp.vx, pp.vy);
-          if (ppSpd < 4.0) { pp.vx *= 4.0/ppSpd; pp.vy *= 4.0/ppSpd; }
-          if (ppSpd > 9.0) { pp.vx *= 9.0/ppSpd; pp.vy *= 9.0/ppSpd; }
         } else if (currPhase === 'dragging') {
           pp.x += (s.cx - pp.x) * 0.22;
           pp.y += (s.cy - pp.y) * 0.22;
@@ -584,7 +583,7 @@ export default function OracleApp() {
       // ── Step 2: Cursor history for shape stamp trail ────────────────────────
       if (oracle && oracle.step === 2 && currPhase === 'dragging') {
         shapeTrailHistRef.current.push({ x: s.cx, y: s.cy, t: now });
-        while (shapeTrailHistRef.current.length > 0 && now - shapeTrailHistRef.current[0].t > 1400)
+        while (shapeTrailHistRef.current.length > 0 && now - shapeTrailHistRef.current[0].t > 2200)
           shapeTrailHistRef.current.shift();
       }
 
@@ -608,29 +607,28 @@ export default function OracleApp() {
             const sp = 1.5 + Math.random() * 2.8 + beyond * 0.015;
 
             if (oracle.step === 0 && pingPongRef.current) {
-              // Fire comet drag: particles emit from comet position
+              // Comet drag: oracle-colored particles emitted from comet head
               const pp = pingPongRef.current;
-              const fRoll = Math.random();
-              const fg2 = fRoll < 0.55 ? Math.floor(Math.random() * 110) : Math.floor(70 + Math.random() * 150);
+              const brightFrac = Math.random();
+              const er = brightFrac > 0.5
+                ? Math.min(255, Math.floor(sr + (255 - sr) * (brightFrac - 0.5) / 0.5 * 0.8))
+                : Math.floor(sr * brightFrac / 0.5);
+              const eg = brightFrac > 0.5
+                ? Math.min(255, Math.floor(sg + (255 - sg) * (brightFrac - 0.5) / 0.5 * 0.8))
+                : Math.floor(sg * brightFrac / 0.5);
+              const eb = brightFrac > 0.5
+                ? Math.min(255, Math.floor(sb + (255 - sb) * (brightFrac - 0.5) / 0.5 * 0.8))
+                : Math.floor(sb * brightFrac / 0.5);
               s.particles.push({
                 x: pp.x + (Math.random()-0.5)*14, y: pp.y + (Math.random()-0.5)*14,
                 vx: Math.cos(ang)*sp*0.75 + (Math.random()-0.5)*2,
                 vy: Math.sin(ang)*sp*0.75 - 0.7 + (Math.random()-0.5)*2,
                 size: 12 + Math.random()*24, growth: 0.9 + Math.random()*1.0,
                 life: 1.0, decay: 0.010 + Math.random()*0.012,
-                r: 255, g: fg2, b: 0, curl: (Math.random()-0.5)*0.14, type: 'color',
+                r: er, g: eg, b: eb, curl: (Math.random()-0.5)*0.14, type: 'color',
               });
             } else if (oracle.step === 1) {
-              // Words drag: emit from cursor position (snake train handled separately)
-              const { text, font: wFont } = pickWordParticle(oracle.response.fragment);
-              const [wr, wg, wb] = wordColor(stepColor, Math.floor(Math.random() * 7));
-              s.particles.push({
-                x: s.cx + (Math.random()-0.5)*22, y: s.cy + (Math.random()-0.5)*22,
-                vx: Math.cos(ang)*sp*0.55, vy: Math.sin(ang)*sp*0.55 - 0.3,
-                size: 0, growth: 0, life: 0.9, decay: 0.008 + Math.random()*0.008,
-                r: wr, g: wg, b: wb, curl: (Math.random()-0.5)*0.25,
-                type: 'word', text, font: wFont,
-              });
+              // Spring chain handles word motion — no new emission during drag
             } else {
               // Shape drag: sparks emitted from shape vertices so they follow the shape's contour
               const sverts = shapeVerticesRef.current;
@@ -689,42 +687,59 @@ export default function OracleApp() {
           const scCx = sc.width/2, scCy = sc.height/2;
 
           if (oracle && oracle.step === 0 && currPhase === 'rendering') {
-            // Fire comet trail inside the ball — drawn from screen-coord history
+            // Fire comet trail inside the ball — oracle-colored, animated fireball head
             const cTrail = cometTrailRef.current;
+            const [cr0, cg0, cb0] = hexToRgb(oracle.colors[0]);
             if (cTrail.length > 1) {
               for (let i = 0; i < cTrail.length; i++) {
                 const tp = cTrail[i];
                 const frac = i / (cTrail.length - 1); // 0=tail, 1=head
                 const cx = scCx + (tp.x - bx);
                 const cy = scCy + (tp.y - by);
-                let fr: number, fg: number, fb: number;
-                if (frac > 0.75) {
-                  const sub = (frac - 0.75) / 0.25;
-                  fr = 255; fg = Math.floor(180 + sub * 75); fb = Math.floor(sub * 200);
-                } else if (frac > 0.4) {
-                  const sub = (frac - 0.4) / 0.35;
-                  fr = 255; fg = Math.floor(45 + sub * 135); fb = 0;
-                } else {
-                  fr = Math.floor((frac / 0.4) * 190 + 40); fg = 0; fb = 0;
-                }
+                // Oracle color: darken at tail, full color at mid, brighten toward white at head
+                const cfr = frac < 0.5
+                  ? Math.floor(cr0 * 0.08 + cr0 * 0.92 * (frac / 0.5))
+                  : Math.min(255, Math.floor(cr0 + (255 - cr0) * ((frac - 0.5) / 0.5) * 0.85));
+                const cfg = frac < 0.5
+                  ? Math.floor(cg0 * 0.08 + cg0 * 0.92 * (frac / 0.5))
+                  : Math.min(255, Math.floor(cg0 + (255 - cg0) * ((frac - 0.5) / 0.5) * 0.85));
+                const cfb = frac < 0.5
+                  ? Math.floor(cb0 * 0.08 + cb0 * 0.92 * (frac / 0.5))
+                  : Math.min(255, Math.floor(cb0 + (255 - cb0) * ((frac - 0.5) / 0.5) * 0.85));
                 const sz = Math.max(1.5, frac * 14 + 2);
-                const alpha = frac * 0.8 + 0.08;
-                const grad = sctx.createRadialGradient(cx, cy, 0, cx, cy, sz * 2.2);
-                grad.addColorStop(0, `rgba(${fr},${fg},${fb},${alpha})`);
-                grad.addColorStop(1, `rgba(${fr},${fg},${fb},0)`);
+                const alpha = frac * 0.82 + 0.06;
+                const grad = sctx.createRadialGradient(cx, cy, 0, cx, cy, sz * 2.4);
+                grad.addColorStop(0, `rgba(${cfr},${cfg},${cfb},${alpha})`);
+                grad.addColorStop(1, `rgba(${cfr},${cfg},${cfb},0)`);
                 sctx.fillStyle = grad;
-                sctx.beginPath(); sctx.arc(cx, cy, sz * 2.2, 0, Math.PI * 2); sctx.fill();
+                sctx.beginPath(); sctx.arc(cx, cy, sz * 2.4, 0, Math.PI * 2); sctx.fill();
               }
-              // White-hot head
-              const head = cTrail[cTrail.length - 1];
-              const hx = scCx + (head.x - bx), hy = scCy + (head.y - by);
-              const hg = sctx.createRadialGradient(hx, hy, 0, hx, hy, 14);
-              hg.addColorStop(0, 'rgba(255,255,255,1.0)');
-              hg.addColorStop(0.2, 'rgba(255,240,80,0.95)');
-              hg.addColorStop(0.55, 'rgba(255,110,0,0.65)');
-              hg.addColorStop(1, 'rgba(255,30,0,0)');
-              sctx.fillStyle = hg;
-              sctx.beginPath(); sctx.arc(hx, hy, 14, 0, Math.PI * 2); sctx.fill();
+              // Animated fireball head — rotating corona petals + wobbling core
+              const head0 = cTrail[cTrail.length - 1];
+              const hx0 = scCx + (head0.x - bx), hy0 = scCy + (head0.y - by);
+              const ft0 = now * 0.009;
+              for (let fi = 0; fi < 7; fi++) {
+                const angle = (fi / 7) * Math.PI * 2 + ft0 * (1.1 + fi * 0.07);
+                const flicker = 0.65 + 0.35 * Math.sin(ft0 * 3.2 + fi * 1.6);
+                const reach = 20 + 9 * flicker;
+                const px0 = hx0 + Math.cos(angle) * reach * 0.55;
+                const py0 = hy0 + Math.sin(angle) * reach * 0.55;
+                const pfg0 = sctx.createRadialGradient(px0, py0, 0, hx0, hy0, reach);
+                pfg0.addColorStop(0, `rgba(${cr0},${cg0},${cb0},${0.65 * flicker})`);
+                pfg0.addColorStop(0.5, `rgba(${cr0},${cg0},${cb0},${0.25 * flicker})`);
+                pfg0.addColorStop(1, `rgba(${cr0},${cg0},${cb0},0)`);
+                sctx.fillStyle = pfg0;
+                sctx.beginPath(); sctx.arc(hx0, hy0, reach, 0, Math.PI * 2); sctx.fill();
+              }
+              const wob = 11 + 3 * Math.sin(ft0 * 4.5);
+              const wbx = hx0 + Math.cos(ft0 * 1.2) * 2.5, wby = hy0 + Math.sin(ft0 * 0.9) * 2.5;
+              const coreG0 = sctx.createRadialGradient(wbx, wby, 0, hx0, hy0, wob * 2);
+              coreG0.addColorStop(0, 'rgba(255,255,255,1.0)');
+              coreG0.addColorStop(0.22, 'rgba(255,250,210,0.95)');
+              coreG0.addColorStop(0.55, `rgba(${cr0},${cg0},${cb0},0.85)`);
+              coreG0.addColorStop(1, `rgba(${cr0},${cg0},${cb0},0)`);
+              sctx.fillStyle = coreG0;
+              sctx.beginPath(); sctx.arc(hx0, hy0, wob * 2, 0, Math.PI * 2); sctx.fill();
             }
 
           } else if (oracle && oracle.step === 2 && currPhase === 'rendering') {
@@ -787,19 +802,34 @@ export default function OracleApp() {
       // ── Particle physics ─────────────────────────────────────────────────
       const ps = s.particles;
 
-      // Word snake train: reposition word particles along cursor history during step 1 drag
+      // Word spring chain: each word springs toward the one ahead, head follows cursor
       if (oracle && oracle.step === 1 && currPhase === 'dragging') {
-        const hist = cursorTrainHistRef.current;
-        if (hist.length > 0) {
-          const wordParticles = ps.filter(p => p.type === 'word').reverse(); // newest first
-          wordParticles.forEach((p, wIdx) => {
-            const histIdx = Math.max(0, hist.length - 1 - wIdx * 7);
-            const target = hist[histIdx];
-            p.x += (target.x - p.x) * 0.38;
-            p.y += (target.y - p.y) * 0.38;
-            p.vx = 0; p.vy = 0;
-            p.life = Math.min(p.life + 0.02, 0.92); // keep alive while dragging
-          });
+        const wordPs = ps.filter(p => p.type === 'word');
+        if (wordPs.length > 0) {
+          // Head (index 0) attracted to cursor
+          const head = wordPs[0];
+          const hdx = s.cx - head.x, hdy = s.cy - head.y;
+          const hdist = Math.hypot(hdx, hdy);
+          const pullStr = Math.min(0.18, hdist * 0.008);
+          head.vx += hdx * pullStr; head.vy += hdy * pullStr;
+          head.vx *= 0.80; head.vy *= 0.80;
+          head.x += head.vx; head.y += head.vy;
+          head.life = Math.min(head.life + 0.01, 0.92);
+          // Each follower springs toward the one in front
+          const GAP = 58;
+          for (let wi = 1; wi < wordPs.length; wi++) {
+            const follower = wordPs[wi];
+            const leader = wordPs[wi - 1];
+            const ldx = leader.x - follower.x, ldy = leader.y - follower.y;
+            const ldist = Math.hypot(ldx, ldy);
+            if (ldist > GAP) {
+              const pull = (ldist - GAP) / ldist * 0.20;
+              follower.vx += ldx * pull; follower.vy += ldy * pull;
+            }
+            follower.vx *= 0.80; follower.vy *= 0.80;
+            follower.x += follower.vx; follower.y += follower.vy;
+            follower.life = Math.min(follower.life + 0.01, 0.92);
+          }
         }
       }
 
@@ -821,7 +851,7 @@ export default function OracleApp() {
             p.x = bx + nx * (limit - 1); p.y = by + ny * (limit - 1);
           }
         } else if (p.type === 'word' && oracle?.step === 1 && currPhase === 'dragging') {
-          // Snake train positioning handled above; skip physics here
+          // Spring chain handled above — skip per-particle physics
         } else {
           // Standard smoke/buoyancy physics
           p.vx += (Math.random()-0.5)*0.12 + p.curl*Math.sin(now*0.001+i);
@@ -882,55 +912,98 @@ export default function OracleApp() {
         }
         ctx.globalCompositeOperation = 'source-over';
 
-        // Step 0 drag: fire comet trail on smoke canvas (comet may be outside ball)
+        // Step 0 drag: oracle-colored comet trail + animated fireball on smoke canvas
         if (oracle && oracle.step === 0 && currPhase === 'dragging') {
           const cTrail = cometTrailRef.current;
+          const [cr1, cg1, cb1] = hexToRgb(oracle.colors[0]);
           if (cTrail.length > 1) {
             ctx.save();
             ctx.globalCompositeOperation = 'screen';
             for (let i = 0; i < cTrail.length; i++) {
               const tp = cTrail[i];
               const frac = i / (cTrail.length - 1);
-              let fr: number, fg: number, fb: number;
-              if (frac > 0.75) {
-                const sub = (frac - 0.75) / 0.25;
-                fr = 255; fg = Math.floor(180 + sub * 75); fb = Math.floor(sub * 200);
-              } else if (frac > 0.4) {
-                const sub = (frac - 0.4) / 0.35;
-                fr = 255; fg = Math.floor(45 + sub * 135); fb = 0;
-              } else {
-                fr = Math.floor((frac / 0.4) * 190 + 40); fg = 0; fb = 0;
-              }
+              const cfr1 = frac < 0.5
+                ? Math.floor(cr1 * 0.08 + cr1 * 0.92 * (frac / 0.5))
+                : Math.min(255, Math.floor(cr1 + (255 - cr1) * ((frac - 0.5) / 0.5) * 0.85));
+              const cfg1 = frac < 0.5
+                ? Math.floor(cg1 * 0.08 + cg1 * 0.92 * (frac / 0.5))
+                : Math.min(255, Math.floor(cg1 + (255 - cg1) * ((frac - 0.5) / 0.5) * 0.85));
+              const cfb1 = frac < 0.5
+                ? Math.floor(cb1 * 0.08 + cb1 * 0.92 * (frac / 0.5))
+                : Math.min(255, Math.floor(cb1 + (255 - cb1) * ((frac - 0.5) / 0.5) * 0.85));
               const sz = Math.max(1.5, frac * 18 + 2.5);
-              const alpha = frac * 0.75 + 0.06;
+              const alpha = frac * 0.78 + 0.05;
               const grad = ctx.createRadialGradient(tp.x, tp.y, 0, tp.x, tp.y, sz * 2.5);
-              grad.addColorStop(0, `rgba(${fr},${fg},${fb},${alpha})`);
-              grad.addColorStop(1, `rgba(${fr},${fg},${fb},0)`);
+              grad.addColorStop(0, `rgba(${cfr1},${cfg1},${cfb1},${alpha})`);
+              grad.addColorStop(1, `rgba(${cfr1},${cfg1},${cfb1},0)`);
               ctx.fillStyle = grad;
               ctx.beginPath(); ctx.arc(tp.x, tp.y, sz * 2.5, 0, Math.PI * 2); ctx.fill();
             }
-            const head = cTrail[cTrail.length - 1];
-            const hg2 = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, 18);
-            hg2.addColorStop(0, 'rgba(255,255,255,1.0)');
-            hg2.addColorStop(0.2, 'rgba(255,240,80,0.95)');
-            hg2.addColorStop(0.55, 'rgba(255,110,0,0.65)');
-            hg2.addColorStop(1, 'rgba(255,30,0,0)');
-            ctx.fillStyle = hg2;
-            ctx.beginPath(); ctx.arc(head.x, head.y, 18, 0, Math.PI * 2); ctx.fill();
+            // Animated fireball head on smoke canvas
+            const head1 = cTrail[cTrail.length - 1];
+            const ft1 = now * 0.009;
+            for (let fi = 0; fi < 7; fi++) {
+              const angle = (fi / 7) * Math.PI * 2 + ft1 * (1.1 + fi * 0.07);
+              const flicker = 0.65 + 0.35 * Math.sin(ft1 * 3.2 + fi * 1.6);
+              const reach = 26 + 10 * flicker;
+              const px1 = head1.x + Math.cos(angle) * reach * 0.55;
+              const py1 = head1.y + Math.sin(angle) * reach * 0.55;
+              const pfg1 = ctx.createRadialGradient(px1, py1, 0, head1.x, head1.y, reach);
+              pfg1.addColorStop(0, `rgba(${cr1},${cg1},${cb1},${0.68 * flicker})`);
+              pfg1.addColorStop(0.5, `rgba(${cr1},${cg1},${cb1},${0.28 * flicker})`);
+              pfg1.addColorStop(1, `rgba(${cr1},${cg1},${cb1},0)`);
+              ctx.fillStyle = pfg1;
+              ctx.beginPath(); ctx.arc(head1.x, head1.y, reach, 0, Math.PI * 2); ctx.fill();
+            }
+            const wob1 = 14 + 4 * Math.sin(ft1 * 4.5);
+            const wbx1 = head1.x + Math.cos(ft1 * 1.2) * 3, wby1 = head1.y + Math.sin(ft1 * 0.9) * 3;
+            const coreG1 = ctx.createRadialGradient(wbx1, wby1, 0, head1.x, head1.y, wob1 * 2);
+            coreG1.addColorStop(0, 'rgba(255,255,255,1.0)');
+            coreG1.addColorStop(0.2, 'rgba(255,250,210,0.95)');
+            coreG1.addColorStop(0.55, `rgba(${cr1},${cg1},${cb1},0.85)`);
+            coreG1.addColorStop(1, `rgba(${cr1},${cg1},${cb1},0)`);
+            ctx.fillStyle = coreG1;
+            ctx.beginPath(); ctx.arc(head1.x, head1.y, wob1 * 2, 0, Math.PI * 2); ctx.fill();
             ctx.restore();
           }
         }
 
-        // Step 2 drag: shape stamp trail on smoke canvas
+        // Step 1 drag: glowing thread connecting chain words
+        if (oracle && oracle.step === 1 && currPhase === 'dragging') {
+          const wordPs2 = ps.filter(p => p.type === 'word');
+          if (wordPs2.length > 1) {
+            const [tr, tg, tb] = hexToRgb(oracle.colors[1]);
+            ctx.save();
+            ctx.globalCompositeOperation = 'screen';
+            // Draw smooth bezier chain through all word positions
+            ctx.strokeStyle = `rgba(${tr},${tg},${tb},0.45)`;
+            ctx.lineWidth = 2;
+            ctx.shadowColor = `rgba(${tr},${tg},${tb},0.6)`;
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.moveTo(wordPs2[0].x, wordPs2[0].y);
+            for (let wi = 1; wi < wordPs2.length; wi++) {
+              const mx = (wordPs2[wi - 1].x + wordPs2[wi].x) / 2;
+              const my = (wordPs2[wi - 1].y + wordPs2[wi].y) / 2;
+              ctx.quadraticCurveTo(wordPs2[wi - 1].x, wordPs2[wi - 1].y, mx, my);
+            }
+            ctx.lineTo(wordPs2[wordPs2.length - 1].x, wordPs2[wordPs2.length - 1].y);
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+
+        // Step 2 drag: expanding shape stamps fill the screen and dissolve
         if (oracle && oracle.step === 2 && currPhase === 'dragging' && shapeStampRef.current) {
           const stamp = shapeStampRef.current;
           const trail2 = shapeTrailHistRef.current;
           ctx.save();
           ctx.globalCompositeOperation = 'screen';
           for (const tp of trail2) {
-            const age = (now - tp.t) / 1400;
-            const alpha = Math.pow(1 - age, 1.5) * 0.55;
-            const scale = 0.55 + (1 - age) * 0.55; // 0.55–1.1× stamp size
+            const age = (now - tp.t) / 2200; // longer lifetime
+            const alpha = Math.pow(1 - age, 1.2) * 0.48;
+            // Stamps expand as they age — "filling" outward then disappearing
+            const scale = (1.0 + age * 3.5) * 2.8;
             const sw = stamp.width * scale, sh = stamp.height * scale;
             ctx.globalAlpha = alpha;
             ctx.drawImage(stamp, tp.x - sw / 2, tp.y - sh / 2, sw, sh);
@@ -1072,32 +1145,29 @@ function wordColor(baseHex: string, idx: number): [number, number, number] {
   return hexToRgb(hslToHex(h + ((idx * 23) % 50) - 25, clamp(s, 30, 98), clamp(l, 35, 98)));
 }
 
-// Preview words seeded inside the ball with marble-like velocities (all English)
+// Seed exactly the fragment words inside the ball — these form the chain dragged out
 function emitPreviewWords(
   fragment: string, color: string, particles: Particle[],
   bx: number, by: number, br: number
 ) {
   const fragmentWords = fragment.split(/\s+/).filter(Boolean);
-  const pool = [...fragmentWords, ...POSH_WORDS];
-  const n = Math.max(10, fragmentWords.length * 4);
-
-  for (let i = 0; i < n; i++) {
-    const text = pool[Math.floor(Math.random() * pool.length)];
+  // Arrange in a loose cluster inside the ball, ordered so index 0 = chain head
+  fragmentWords.forEach((text, i) => {
+    const angle = (i / fragmentWords.length) * Math.PI * 2 + Math.random() * 0.8;
+    const dist = (0.25 + Math.random() * 0.45) * br * 0.72;
     const sz = FONT_SIZES[Math.floor(Math.random() * FONT_SIZES.length)];
     const font = `${sz}px ${FONT_FAMILIES[Math.floor(Math.random() * FONT_FAMILIES.length)]}`;
-    const angle = (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 1.8;
-    const dist = (0.1 + Math.random() * 0.55) * br * 0.78;
     const [r, g, b] = wordColor(color, i);
-    const spd = 0.7 + Math.random() * 1.5;
+    const spd = 0.4 + Math.random() * 1.1;
     const spAng = Math.random() * Math.PI * 2;
     particles.push({
       x: bx + Math.cos(angle) * dist,
       y: by + Math.sin(angle) * dist,
       vx: Math.cos(spAng) * spd, vy: Math.sin(spAng) * spd,
       size: 0, growth: 0,
-      life: 1.0, decay: 0.0006,
+      life: 1.0, decay: 0.0005,
       r, g, b, curl: 0,
       type: 'word', text, font,
     });
-  }
+  });
 }
