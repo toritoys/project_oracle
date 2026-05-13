@@ -23,7 +23,7 @@ body {
   width: 70vmin; height: 70vmin;
   -webkit-tap-highlight-color: transparent;
   z-index: 2;
-  transform: translateY(-5vh);
+  transform: translateY(-9vh);
 }
 .ball-clip {
   position: absolute; inset: 0;
